@@ -179,7 +179,7 @@ export default function DashboardPage() {
       });
       setRecentAssets(assets.slice(0, 5));
 
-      // --- CHART DATA (ARRAY 5 TAHAP) ---
+      // --- CHART DATA (DISTRIBUSI TAHAPAN) ---
       const stepCounts = [0, 0, 0, 0, 0];
       const stepValues = [0, 0, 0, 0, 0];
 
@@ -188,8 +188,6 @@ export default function DashboardPage() {
         if (step >= 1 && step <= 5) {
           const index = step - 1;
           stepCounts[index] += 1;
-
-          // PERUBAHAN: MENGGUNAKAN NILAI BUKU
           stepValues[index] += item.nilai_buku || 0;
         }
       });
@@ -202,18 +200,33 @@ export default function DashboardPage() {
         { name: "Selesai", count: stepCounts[4], totalValue: stepValues[4] },
       ]);
 
+      // --- PERBAIKAN LOGIKA PIE CHART (TOP 5 + LAINNYA) ---
       const typeCounts: Record<string, number> = {};
       assets.forEach((item) => {
-        const type = item.jenis_aset || "Lainnya";
+        // Normalisasi nama aset: Hapus spasi berlebih, default "Tanpa Nama"
+        const type = (item.jenis_aset || "Tanpa Nama").trim();
         typeCounts[type] = (typeCounts[type] || 0) + 1;
       });
 
-      setPieData(
-        Object.keys(typeCounts).map((key) => ({
-          name: key,
-          value: typeCounts[key],
-        })),
-      );
+      // 1. Ubah ke array dan urutkan dari yang terbanyak
+      const sortedData = Object.keys(typeCounts)
+        .map((key) => ({ name: key, value: typeCounts[key] }))
+        .sort((a, b) => b.value - a.value);
+
+      // 2. Ambil Top 5
+      const topLimit = 5;
+      const topCategories = sortedData.slice(0, topLimit);
+
+      // 3. Gabungkan sisanya menjadi "Lainnya"
+      if (sortedData.length > topLimit) {
+        const othersCount = sortedData
+          .slice(topLimit)
+          .reduce((acc, curr) => acc + curr.value, 0);
+
+        topCategories.push({ name: "Lainnya", value: othersCount });
+      }
+
+      setPieData(topCategories);
     } catch (error) {
       console.error("Dashboard Error:", error);
     }

@@ -5,18 +5,22 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   FilePlus,
-  Activity, // Icon untuk Progress Aset
-  TableProperties, // Icon untuk Monitoring Data
+  Activity,
+  TableProperties,
   LogOut,
   Menu,
   BookOpen,
   X,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+// Tambahkan useCallback disini
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { supabase } from "../../lib/supabaseClient";
-import { toast, Toaster } from "react-hot-toast"; // <--- TAMBAHKAN TOASTER DISINI
+import { toast, Toaster } from "react-hot-toast";
 import Image from "next/image";
+
+// --- KONFIGURASI WAKTU LOGOUT (15 MENIT) ---
+const TIMEOUT_MS = 15 * 60 * 1000;
 
 export default function ClientLayout({
   children,
@@ -27,6 +31,9 @@ export default function ClientLayout({
   const [isMobile, setIsMobile] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+
+  // State untuk Auto Logout
+  const [lastActivity, setLastActivity] = useState(Date.now());
 
   useEffect(() => {
     const handleResize = () => {
@@ -59,12 +66,51 @@ export default function ClientLayout({
       if (user) {
         const adminCheck =
           user.email?.includes("admin") || user.user_metadata?.role === "admin";
-        // Admin status stored but not used - can be extended for future use
         console.log("Admin status:", adminCheck);
       }
     };
     checkUser();
   }, []);
+
+  // --- LOGIKA AUTO LOGOUT ---
+  const handleAutoLogout = useCallback(async () => {
+    await supabase.auth.signOut();
+    toast.error("Sesi habis karena tidak ada aktivitas.", {
+      icon: "⏳",
+      duration: 5000,
+      style: { border: "1px solid #EF4444", color: "#713200" },
+    });
+    router.replace("/"); // Kembali ke halaman login/landing
+  }, [router]);
+
+  useEffect(() => {
+    // Fungsi reset timer saat ada gerakan
+    const resetTimer = () => setLastActivity(Date.now());
+
+    // Event listener aktivitas user
+    window.addEventListener("mousemove", resetTimer);
+    window.addEventListener("keypress", resetTimer);
+    window.addEventListener("click", resetTimer);
+    window.addEventListener("scroll", resetTimer);
+
+    // Cek setiap 10 detik
+    const intervalId = setInterval(() => {
+      const now = Date.now();
+      if (now - lastActivity > TIMEOUT_MS) {
+        handleAutoLogout();
+      }
+    }, 10000);
+
+    return () => {
+      // Bersihkan listener
+      window.removeEventListener("mousemove", resetTimer);
+      window.removeEventListener("keypress", resetTimer);
+      window.removeEventListener("click", resetTimer);
+      window.removeEventListener("scroll", resetTimer);
+      clearInterval(intervalId);
+    };
+  }, [lastActivity, handleAutoLogout]);
+  // --------------------------
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -78,7 +124,7 @@ export default function ClientLayout({
 
   return (
     <div className="flex min-h-screen bg-gray-50 relative">
-      {/* --- KOMPONEN TOASTER (WAJIB ADA AGAR NOTIF MUNCUL) --- */}
+      {/* --- KOMPONEN TOASTER --- */}
       <Toaster
         position="top-center"
         reverseOrder={false}
@@ -91,7 +137,7 @@ export default function ClientLayout({
             background: "#fff",
             borderRadius: "12px",
             boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-            zIndex: 99999, // Pastikan di atas Modal (z-50)
+            zIndex: 99999,
           },
         }}
       />

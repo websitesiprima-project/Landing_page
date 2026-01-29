@@ -14,7 +14,14 @@ import {
   Legend,
 } from "recharts";
 
-const COLORS = ["#008C45", "#1E3A8A", "#F9A825", "#EF4444", "#8B5CF6"];
+const COLORS = [
+  "#008C45",
+  "#1E3A8A",
+  "#F9A825",
+  "#EF4444",
+  "#8B5CF6",
+  "#64748B",
+];
 
 const formatRupiah = (value: number) => {
   return new Intl.NumberFormat("id-ID", {
@@ -86,11 +93,11 @@ export function DistributionChart({ data }: ChartProps) {
           }}
         />
 
-        {/* Y-Axis Kanan: NILAI BUKU (Update Warna Biru Tua PLN) */}
+        {/* Y-Axis Kanan: NILAI BUKU */}
         <YAxis
           yAxisId="right"
           orientation="right"
-          stroke="#1E3A8A" // Warna Biru Tua
+          stroke="#1E3A8A"
           fontSize={11}
           axisLine={false}
           tickLine={false}
@@ -105,10 +112,15 @@ export function DistributionChart({ data }: ChartProps) {
         />
 
         <Tooltip
-          formatter={(value: number | undefined, name?: string) => {
-            if (typeof value !== "number") return "";
-            if (name === "Nilai Buku (Rp)") return formatRupiah(value);
-            return value + " Unit";
+          formatter={(
+            value: number | string | Array<number | string> | undefined,
+            name: string | number | undefined,
+          ) => {
+            if (value === undefined) return "";
+            if (name === "Nilai Buku (Rp)" && typeof value === "number") {
+              return formatRupiah(value);
+            }
+            return `${value} Unit`;
           }}
           labelStyle={{ color: "#333", fontWeight: "bold" }}
           contentStyle={{
@@ -121,7 +133,6 @@ export function DistributionChart({ data }: ChartProps) {
 
         <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
 
-        {/* Bar Unit (Biru Muda) */}
         <Bar
           yAxisId="left"
           dataKey="count"
@@ -131,11 +142,10 @@ export function DistributionChart({ data }: ChartProps) {
           barSize={20}
         />
 
-        {/* Bar Rupiah (Biru Tua - Nilai Buku) */}
         <Bar
           yAxisId="right"
           dataKey="totalValue"
-          name="Nilai Buku (Rp)" // LABEL UPDATED
+          name="Nilai Buku (Rp)"
           fill="#1E3A8A"
           radius={[4, 4, 0, 0]}
           barSize={20}
@@ -147,6 +157,8 @@ export function DistributionChart({ data }: ChartProps) {
 
 // 2. Pie Chart
 export function CompositionChart({ data }: PieChartProps) {
+  const total = data.reduce((acc, curr) => acc + curr.value, 0);
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <PieChart>
@@ -154,21 +166,60 @@ export function CompositionChart({ data }: PieChartProps) {
           data={data}
           cx="50%"
           cy="50%"
-          innerRadius={50}
-          outerRadius={70}
-          paddingAngle={5}
+          innerRadius={60}
+          outerRadius={90}
+          paddingAngle={3}
           dataKey="value"
         >
           {data.map((entry, index) => (
-            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+            <Cell
+              key={`cell-${index}`}
+              fill={COLORS[index % COLORS.length]}
+              strokeWidth={2}
+            />
           ))}
         </Pie>
-        <Tooltip />
+        <Tooltip
+          formatter={(
+            value: number | string | Array<number | string> | undefined,
+          ) => {
+            if (value === undefined) return [];
+            if (typeof value !== "number") return [value, "Jumlah"];
+            return [
+              `${value} Unit (${((value / total) * 100).toFixed(1)}%)`,
+              "Jumlah",
+            ];
+          }}
+          contentStyle={{
+            borderRadius: "8px",
+            border: "none",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            fontSize: "12px",
+          }}
+        />
         <Legend
-          verticalAlign="bottom"
-          height={36}
+          layout="vertical"
+          verticalAlign="middle"
+          align="right"
+          iconType="circle"
           iconSize={8}
-          wrapperStyle={{ fontSize: "10px" }}
+          wrapperStyle={{
+            fontSize: "11px",
+            paddingLeft: "10px",
+            lineHeight: "24px",
+            maxHeight: "200px", // Scroll jika terlalu panjang
+            overflowY: "auto", // Scroll aktif
+            width: "150px", // Batasi lebar
+          }}
+          formatter={(value) => (
+            <span
+              className="text-gray-600 font-medium truncate inline-block align-middle"
+              style={{ maxWidth: "120px" }} // Paksa potong teks
+              title={value} // Tooltip bawaan browser saat hover
+            >
+              {value}
+            </span>
+          )}
         />
       </PieChart>
     </ResponsiveContainer>

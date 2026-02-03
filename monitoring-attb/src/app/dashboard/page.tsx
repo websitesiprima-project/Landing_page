@@ -1,45 +1,36 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { supabase } from "../../lib/supabaseClient";
 import {
-  TrendingUp,
-  Package,
+  LayoutDashboard,
   CheckCircle,
-  Wallet,
+  TrendingUp,
   ArrowRight,
+  Wallet,
+  Package,
   Activity,
 } from "lucide-react";
-import Link from "next/link";
-import { supabase } from "../../lib/supabaseClient";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 
-// --- IMPORT GRAFIK DINAMIS ---
+// DYNAMIC IMPORT CHART
 const DistributionChart = dynamic(
-  () =>
-    import("../../components/DashboardCharts").then(
-      (mod) => mod.DistributionChart,
-    ),
+  () => import("../../components/Charts").then((mod) => mod.DistributionChart),
   {
     ssr: false,
     loading: () => (
-      <div className="h-full w-full bg-gray-100 animate-pulse rounded-lg flex items-center justify-center text-gray-400 text-xs">
-        Memuat Grafik...
-      </div>
+      <div className="h-full bg-gray-100 animate-pulse rounded-lg" />
     ),
   },
 );
 
 const CompositionChart = dynamic(
-  () =>
-    import("../../components/DashboardCharts").then(
-      (mod) => mod.CompositionChart,
-    ),
+  () => import("../../components/Charts").then((mod) => mod.CompositionChart),
   {
     ssr: false,
     loading: () => (
-      <div className="h-full w-full bg-gray-100 animate-pulse rounded-full flex items-center justify-center text-gray-400 text-xs">
-        Memuat...
-      </div>
+      <div className="h-full bg-gray-100 animate-pulse rounded-full" />
     ),
   },
 );
@@ -54,17 +45,19 @@ interface AssetData {
   created_at: string;
 }
 
-interface DistributionData {
+// --- FIX TYPE ERROR ---
+// Tambahkan [key: string]: ... agar cocok dengan interface di komponen Charts.tsx
+interface ChartData {
   name: string;
   count: number;
   totalValue: number;
-  [key: string]: string | number | undefined;
+  [key: string]: string | number | undefined; // <--- INI PERBAIKANNYA
 }
 
-interface CompositionData {
+interface PieData {
   name: string;
   value: number;
-  [key: string]: string | number;
+  [key: string]: string | number | undefined; // <--- INI PERBAIKANNYA
 }
 
 interface StatCardProps {
@@ -75,61 +68,25 @@ interface StatCardProps {
   subtext: string;
 }
 
-const formatCurrencyShort = (num: number) => {
-  if (num >= 1_000_000_000) {
-    return `Rp ${(num / 1_000_000_000).toFixed(2).replace(".", ",")} M`;
-  } else if (num >= 1_000_000) {
-    return `Rp ${(num / 1_000_000).toFixed(0)} Jt`;
-  } else {
-    return `Rp ${num.toLocaleString("id-ID")}`;
-  }
-};
-
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-8 animate-pulse">
-      <div className="flex justify-between items-end">
-        <div className="space-y-2">
-          <div className="h-8 w-64 bg-gray-200 rounded-lg"></div>
-          <div className="h-4 w-48 bg-gray-200 rounded-lg"></div>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[1, 2, 3, 4].map((i) => (
-          <div
-            key={i}
-            className="bg-white p-6 rounded-xl border border-gray-100 h-32"
-          ></div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export default function DashboardPage() {
-  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
-    totalAset: 0,
-    totalNilaiBuku: 0,
-    totalTafsiran: 0,
-    selesai: 0,
-    dalamProses: 0,
+    totalAsset: 0,
+    totalValue: 0,
+    totalScrap: 0,
+    completed: 0,
+    onProgress: 0,
   });
 
-  const [chartData, setChartData] = useState<DistributionData[]>([]);
-  const [pieData, setPieData] = useState<CompositionData[]>([]);
+  const [chartData, setChartData] = useState<ChartData[]>([]);
+  const [pieData, setPieData] = useState<PieData[]>([]);
+
+  const [loading, setLoading] = useState(true);
   const [recentAssets, setRecentAssets] = useState<AssetData[]>([]);
-  const [userName, setUserName] = useState("");
+  const [userName, setUserName] = useState("User");
 
   useEffect(() => {
-    const controller = new AbortController();
-    const init = async () => {
-      setLoading(true);
-      await Promise.all([fetchDashboardData(), getUserName()]);
-      setLoading(false);
-    };
-    init();
-    return () => controller.abort();
+    fetchDashboardData();
+    getUserName();
   }, []);
 
   const getUserName = async () => {
@@ -145,97 +102,128 @@ export default function DashboardPage() {
 
   const fetchDashboardData = async () => {
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from("attb_assets")
-        .select(
-          "id, jenis_aset, merk_type, nilai_buku, harga_tafsiran, current_step, created_at",
-        )
+        .select("*")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      const assets = (data || []) as AssetData[];
+      if (data) {
+        const assets = data as AssetData[];
 
-      // --- HITUNG STATISTIK ---
-      const totalAset = assets.length;
-      const totalNilaiBuku = assets.reduce(
-        (acc, curr) => acc + (curr.nilai_buku || 0),
-        0,
-      );
-      const totalTafsiran = assets.reduce(
-        (acc, curr) => acc + (curr.harga_tafsiran || 0),
-        0,
-      );
+        // 1. HITUNG STATISTIK (SELESAI = TAHAP 8)
+        const completed = assets.filter((a) => a.current_step === 8).length;
+        const onProgress = assets.filter((a) => a.current_step < 8).length;
 
-      const selesai = assets.filter((item) => item.current_step === 5).length;
-      const dalamProses = totalAset - selesai;
+        const totalValue = assets.reduce(
+          (acc, curr) => acc + (curr.nilai_buku || 0),
+          0,
+        );
+        const totalScrap = assets.reduce(
+          (acc, curr) => acc + (curr.harga_tafsiran || 0),
+          0,
+        );
 
-      setStats({
-        totalAset,
-        totalNilaiBuku,
-        totalTafsiran,
-        selesai,
-        dalamProses,
-      });
-      setRecentAssets(assets.slice(0, 5));
+        setStats({
+          totalAsset: assets.length,
+          totalValue,
+          totalScrap,
+          completed,
+          onProgress,
+        });
 
-      // --- CHART DATA (DISTRIBUSI TAHAPAN) ---
-      const stepCounts = [0, 0, 0, 0, 0];
-      const stepValues = [0, 0, 0, 0, 0];
+        setRecentAssets(assets.slice(0, 5));
 
-      assets.forEach((item) => {
-        const step = item.current_step || 1;
-        if (step >= 1 && step <= 5) {
-          const index = step - 1;
-          stepCounts[index] += 1;
-          stepValues[index] += item.nilai_buku || 0;
-        }
-      });
+        // 2. DATA GRAFIK DISTRIBUSI (BAR CHART)
+        const statusMap: Record<number, string> = {
+          1: "AE-1",
+          2: "AE-2",
+          3: "AE-3",
+          4: "AE-4",
+          5: "Dekom",
+          6: "Lelang",
+          7: "Angkut",
+          8: "Selesai",
+        };
 
-      setChartData([
-        { name: "AE-1", count: stepCounts[0], totalValue: stepValues[0] },
-        { name: "AE-2", count: stepCounts[1], totalValue: stepValues[1] },
-        { name: "AE-3", count: stepCounts[2], totalValue: stepValues[2] },
-        { name: "AE-4", count: stepCounts[3], totalValue: stepValues[3] },
-        { name: "Selesai", count: stepCounts[4], totalValue: stepValues[4] },
-      ]);
+        const statusCounts = assets.reduce<Record<string, ChartData>>(
+          (acc, curr) => {
+            const stepLabel =
+              statusMap[curr.current_step] || `Tahap ${curr.current_step}`;
 
-      // --- PERBAIKAN LOGIKA PIE CHART (TOP 5 + LAINNYA) ---
-      const typeCounts: Record<string, number> = {};
-      assets.forEach((item) => {
-        // Normalisasi nama aset: Hapus spasi berlebih, default "Tanpa Nama"
-        const type = (item.jenis_aset || "Tanpa Nama").trim();
-        typeCounts[type] = (typeCounts[type] || 0) + 1;
-      });
+            if (!acc[stepLabel]) {
+              acc[stepLabel] = { name: stepLabel, count: 0, totalValue: 0 };
+            }
+            acc[stepLabel].count += 1;
+            acc[stepLabel].totalValue += curr.nilai_buku || 0;
+            return acc;
+          },
+          {},
+        );
 
-      // 1. Ubah ke array dan urutkan dari yang terbanyak
-      const sortedData = Object.keys(typeCounts)
-        .map((key) => ({ name: key, value: typeCounts[key] }))
-        .sort((a, b) => b.value - a.value);
+        const orderedLabels = [
+          "AE-1",
+          "AE-2",
+          "AE-3",
+          "AE-4",
+          "Dekom",
+          "Lelang",
+          "Angkut",
+          "Selesai",
+        ];
 
-      // 2. Ambil Top 5
-      const topLimit = 5;
-      const topCategories = sortedData.slice(0, topLimit);
+        // Pastikan tipe data sesuai dengan ChartData
+        const sortedChartData: ChartData[] = orderedLabels.map((label) => ({
+          name: label,
+          count: statusCounts[label]?.count || 0,
+          totalValue: statusCounts[label]?.totalValue || 0,
+        }));
 
-      // 3. Gabungkan sisanya menjadi "Lainnya"
-      if (sortedData.length > topLimit) {
-        const othersCount = sortedData
-          .slice(topLimit)
-          .reduce((acc, curr) => acc + curr.value, 0);
+        setChartData(sortedChartData);
 
-        topCategories.push({ name: "Lainnya", value: othersCount });
+        // 3. DATA PIE CHART
+        const categoryCounts = assets.reduce<Record<string, PieData>>(
+          (acc, curr) => {
+            const cat = curr.jenis_aset || "Lainnya";
+            if (!acc[cat]) {
+              acc[cat] = { name: cat, value: 0 };
+            }
+            acc[cat].value += 1;
+            return acc;
+          },
+          {},
+        );
+
+        const sortedPie: PieData[] = Object.values(categoryCounts).sort(
+          (a, b) => b.value - a.value,
+        );
+        setPieData(sortedPie);
       }
-
-      setPieData(topCategories);
     } catch (error) {
-      console.error("Dashboard Error:", error);
+      console.error("Error fetching dashboard data:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (loading) return <DashboardSkeleton />;
+  const formatRupiahShort = (val: number) => {
+    if (val >= 1_000_000_000) return `Rp ${(val / 1_000_000_000).toFixed(1)} M`;
+    if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(0)} Jt`;
+    return `Rp ${val.toLocaleString("id-ID")}`;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pln-primary"></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 pb-10">
+    <div className="space-y-6 pb-20 animate-in fade-in duration-500">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-end gap-4">
         <div>
@@ -251,7 +239,7 @@ export default function DashboardPage() {
             Total Nilai Buku (Aset)
           </p>
           <p className="text-xl md:text-2xl font-bold text-pln-primary">
-            {formatCurrencyShort(stats.totalNilaiBuku)}
+            {formatRupiahShort(stats.totalValue)}
           </p>
         </div>
       </div>
@@ -260,54 +248,53 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Aset"
-          value={stats.totalAset}
+          value={stats.totalAsset}
           icon={<Package size={20} className="text-white" />}
           color="bg-pln-primary"
           subtext="Unit Terdaftar"
         />
         <StatCard
           title="Proses"
-          value={stats.dalamProses}
+          value={stats.onProgress}
           icon={<Activity size={20} className="text-white" />}
           color="bg-yellow-500"
           subtext="Sedang Berjalan"
         />
         <StatCard
           title="Selesai"
-          value={stats.selesai}
+          value={stats.completed}
           icon={<CheckCircle size={20} className="text-white" />}
           color="bg-green-600"
           subtext="Siap Hapus"
         />
         <StatCard
           title="Estimasi Recovery"
-          value={formatCurrencyShort(stats.totalTafsiran)}
+          value={formatRupiahShort(stats.totalScrap)}
           icon={<TrendingUp size={20} className="text-white" />}
           color="bg-pln-gold"
           subtext="Potensi Pendapatan"
         />
       </div>
 
-      {/* CHARTS AREA */}
+      {/* CHARTS SECTION */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* BAR CHART */}
-        {/* Tambahkan flex flex-col agar container lebih stabil */}
         <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100 min-h-[300px] flex flex-col">
           <h3 className="font-bold text-gray-800 mb-6 flex items-center gap-2">
             <Wallet size={18} className="text-pln-primary" /> Distribusi Tahapan
             & End Accounting Value
           </h3>
-          {/* UBAH h-64 JADI h-[300px] UNTUK FIX ERROR WIDTH(-1) */}
           <div className="h-[300px] w-full">
             <DistributionChart data={chartData} />
           </div>
         </div>
 
         {/* PIE CHART */}
-        {/* Tambahkan flex flex-col */}
         <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm border border-gray-100 min-h-[300px] flex flex-col">
-          <h3 className="font-bold text-gray-800 mb-4">Jenis Aset</h3>
-          {/* UBAH h-64 JADI h-[300px] UNTUK FIX ERROR WIDTH(-1) */}
+          <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <LayoutDashboard size={18} className="text-pln-primary" /> Jenis
+            Aset
+          </h3>
           <div className="h-[300px] w-full">
             <CompositionChart data={pieData} />
           </div>
@@ -334,13 +321,9 @@ export default function DashboardPage() {
               >
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[10px] ${
-                      asset.current_step === 5
-                        ? "bg-green-100 text-green-600"
-                        : "bg-blue-50 text-blue-600"
-                    }`}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[10px] ${asset.current_step === 8 ? "bg-green-100 text-green-600" : "bg-blue-50 text-blue-600"}`}
                   >
-                    {asset.current_step === 5 ? "OK" : `T${asset.current_step}`}
+                    {asset.current_step === 8 ? "OK" : `T${asset.current_step}`}
                   </div>
                   <div>
                     <p className="font-bold text-sm text-gray-800 line-clamp-1">
@@ -353,7 +336,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-xs text-gray-700">
-                    {formatCurrencyShort(asset.nilai_buku || 0)}
+                    {formatRupiahShort(asset.nilai_buku || 0)}
                   </p>
                   <p className="text-[10px] text-gray-400">
                     {new Date(asset.created_at).toLocaleDateString("id-ID")}

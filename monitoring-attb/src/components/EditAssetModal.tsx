@@ -174,9 +174,10 @@ export default function EditAssetModal({
       toast.success("Data aset berhasil diperbarui!");
       onSuccess();
       onClose();
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Terjadi kesalahan saat menyimpan.";
       console.error("Error Full:", error);
-      toast.error(error.message || "Terjadi kesalahan saat menyimpan.");
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }

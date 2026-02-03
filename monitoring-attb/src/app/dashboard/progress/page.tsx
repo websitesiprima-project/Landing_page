@@ -14,6 +14,7 @@ import {
   Trash2,
   SortAsc,
   MapPin,
+  Undo2, // Ikon Revert
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
@@ -88,6 +89,7 @@ export default function ProgressPage() {
   const [batchSurat, setBatchSurat] = useState("");
   const [moving, setMoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [reverting, setReverting] = useState(false); // State baru untuk Revert
 
   // Edit Modal State
   const [isEditModalOpen, setEditModalOpen] = useState(false);
@@ -167,6 +169,53 @@ export default function ProgressPage() {
     else setSelectedIds(new Set(filteredAssets.map((a) => a.id)));
   };
 
+  // --- HANDLER REVERT (FITUR BARU) ---
+  const handleBatchRevert = async () => {
+    if (selectedIds.size === 0) return;
+    if (activeStation <= 1) {
+      return toast.error("Aset di Tahap 1 (AE-1) tidak bisa dikembalikan.");
+    }
+
+    const isConfirmed = window.confirm(
+      `Yakin ingin mengembalikan ${selectedIds.size} aset ke tahap sebelumnya?\n(Nomor Surat tahap ini akan dihapus)`,
+    );
+    if (!isConfirmed) return;
+
+    setReverting(true);
+    try {
+      const prevStep = activeStation - 1;
+      const prevStatusLabel =
+        STATIONS.find((s) => s.id === prevStep)?.label || `Tahap ${prevStep}`;
+
+      // FIX: Gunakan tipe spesifik string | number | null (bukan any)
+      const updatePayload: Record<string, string | number | null> = {
+        current_step: prevStep,
+        status: prevStatusLabel,
+      };
+
+      if (activeStation === 2) updatePayload.no_surat_ae2 = null;
+      if (activeStation === 3) updatePayload.no_surat_ae3 = null;
+      if (activeStation === 4) updatePayload.no_surat_ae4 = null;
+      if (activeStation === 8) updatePayload.no_surat_sk = null;
+
+      const { error } = await supabase
+        .from("attb_assets")
+        .update(updatePayload)
+        .in("id", Array.from(selectedIds));
+
+      if (error) throw error;
+
+      toast.success(`Berhasil mengembalikan ${selectedIds.size} aset.`);
+      setSelectedIds(new Set());
+      fetchData();
+    } catch (err) {
+      console.error("Revert Error:", err);
+      toast.error("Gagal mengembalikan aset.");
+    } finally {
+      setReverting(false);
+    }
+  };
+
   const handleBatchDelete = async () => {
     if (selectedIds.size === 0) return;
     const isConfirmed = window.confirm(
@@ -185,7 +234,6 @@ export default function ProgressPage() {
       setSelectedIds(new Set());
       fetchData();
     } catch (err) {
-      // FIX 1: Gunakan variable err untuk logging
       console.error("Delete Error:", err);
       toast.error("Gagal menghapus aset.");
     } finally {
@@ -193,12 +241,9 @@ export default function ProgressPage() {
     }
   };
 
-  // --- BATCH TRANSIT (LOGIKA BARU) ---
+  // --- BATCH TRANSIT ---
   const handleBatchTransit = async () => {
     const nextStep = activeStation + 1;
-
-    // Cek apakah step selanjutnya perlu surat?
-    // Step 5, 6, 7 (Dekom, Lelang, Angkut) TIDAK perlu surat
     const needsSurat = nextStep <= 4 || nextStep === 8;
 
     if (needsSurat && !batchSurat.trim()) {
@@ -246,7 +291,6 @@ export default function ProgressPage() {
           STATIONS.find((s) => s.id === nextStep)?.label || `Tahap ${nextStep}`,
       };
 
-      // Hanya update kolom surat jika diperlukan
       if (nextStep <= 4) {
         updatePayload[`no_surat_ae${nextStep}`] = batchSurat;
       } else if (nextStep === 8) {
@@ -267,7 +311,6 @@ export default function ProgressPage() {
       setSelectedIds(new Set());
       fetchData();
     } catch (err) {
-      // FIX 2: Gunakan variable err untuk logging
       console.error("Transit Error:", err);
       toast.error("Gagal memindahkan aset.");
     } finally {
@@ -280,7 +323,6 @@ export default function ProgressPage() {
     setEditModalOpen(true);
   };
 
-  // Helper boolean untuk UI Modal
   const nextStepIsIntermediate =
     activeStation + 1 >= 5 && activeStation + 1 <= 7;
 
@@ -376,9 +418,24 @@ export default function ProgressPage() {
             </div>
           </div>
           <div className="flex gap-3">
+            {/* TOMBOL REVERT */}
+            <button
+              onClick={handleBatchRevert}
+              disabled={reverting || moving || deleting || activeStation <= 1}
+              className="bg-orange-50 text-orange-600 border border-orange-200 px-4 py-2.5 rounded-lg font-bold shadow-sm hover:bg-orange-100 flex items-center gap-2 active:scale-95 disabled:opacity-50"
+              title="Kembalikan ke tahap sebelumnya"
+            >
+              {reverting ? (
+                <Loader2 className="animate-spin" size={18} />
+              ) : (
+                <Undo2 size={18} />
+              )}
+              <span className="hidden sm:inline">Revert</span>
+            </button>
+
             <button
               onClick={handleBatchDelete}
-              disabled={deleting || moving}
+              disabled={deleting || moving || reverting}
               className="bg-red-50 text-red-600 border border-red-200 px-4 py-2.5 rounded-lg font-bold shadow-sm hover:bg-red-100 flex items-center gap-2 active:scale-95 disabled:opacity-50"
             >
               {deleting ? (
@@ -386,14 +443,12 @@ export default function ProgressPage() {
               ) : (
                 <Trash2 size={18} />
               )}{" "}
-              <span className="hidden sm:inline">
-                Hapus ({selectedIds.size})
-              </span>
+              <span className="hidden sm:inline">Hapus</span>
             </button>
             {activeStation < 8 && (
               <button
                 onClick={() => setTransitModalOpen(true)}
-                disabled={deleting || moving}
+                disabled={deleting || moving || reverting}
                 className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-bold shadow-md hover:bg-blue-700 flex items-center gap-2 active:scale-95 disabled:opacity-50"
               >
                 Proses ke{" "}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react"; // 1. Tambahkan import 'use'
+import { useEffect, useState, use, useCallback } from "react";
 import { supabase } from "../../../../lib/supabaseClient";
 import {
   ArrowLeft,
@@ -11,11 +11,23 @@ import {
   AlertCircle,
   Scale,
   Hash,
+  Loader2,
+  Edit,
+  CheckCircle,
+  X,
+  Trash2,
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { toast } from "react-hot-toast";
 
-// Interface Data
+// --- INTERFACES ---
+interface jsPDFWithAutoTable extends jsPDF {
+  lastAutoTable: { finalY: number };
+}
+
 interface AssetDetail {
   id: string;
   no_aset: string;
@@ -32,8 +44,6 @@ interface AssetDetail {
   foto_url: string | null;
   created_at: string;
   keterangan: string;
-
-  // Surat-surat
   no_surat_ae1: string;
   no_surat_ae2: string;
   no_attb: string;
@@ -42,6 +52,7 @@ interface AssetDetail {
   no_surat_sk: string;
 }
 
+// ALUR 8 TAHAP (SINKRON DENGAN MONITORING)
 const TIMELINE_STEPS = [
   {
     step: 1,
@@ -59,44 +70,233 @@ const TIMELINE_STEPS = [
     desc: "Pengajuan usulan ke manajemen",
   },
   { step: 4, label: "Review SPI (AE-4)", desc: "Audit dan review oleh SPI" },
-  { step: 5, label: "SK Penghapusan", desc: "Penerbitan SK Penghapusan Aset" },
+  {
+    step: 5,
+    label: "Persetujuan Dekom",
+    desc: "Persetujuan Dekomisioning Aset",
+  },
+  { step: 6, label: "Lelang", desc: "Proses Lelang Aset" },
+  { step: 7, label: "Pengangkutan", desc: "Pengangkutan Aset dari Lokasi" },
+  {
+    step: 8,
+    label: "Selesai (SK)",
+    desc: "Penerbitan SK Penghapusan & Selesai",
+  },
 ];
 
-// 2. Ubah tipe params menjadi Promise
 export default function AssetDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  // 3. Unwrap params dengan use()
   const { id } = use(params);
+  const router = useRouter();
 
   const [asset, setAsset] = useState<AssetDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const [downloading, setDownloading] = useState(false);
 
-  useEffect(() => {
-    const fetchAssetDetail = async () => {
-      setLoading(true);
-      // Gunakan 'id' hasil unwrap tadi
-      const { data, error } = await supabase
-        .from("attb_assets")
-        .select("*")
-        .eq("id", id)
-        .single();
+  // STATE MODAL
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
-      if (error) {
-        console.error("Error fetching detail:", error);
-      } else {
-        setAsset(data);
-      }
-      setLoading(false);
-    };
+  // FORM STATE
+  const [updateForm, setUpdateForm] = useState({ nextStep: 2, noSurat: "" });
+  const [editForm, setEditForm] = useState<Partial<AssetDetail>>({});
 
-    if (id) {
-      fetchAssetDetail();
+  // FIX 2: Bungkus fungsi dengan useCallback
+  const fetchAssetDetail = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("attb_assets")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (error) {
+      console.error("Error fetching:", error);
+      toast.error("Gagal memuat detail aset");
+    } else {
+      setAsset(data);
+      // Auto-set step selanjutnya
+      setUpdateForm({ nextStep: (data.current_step || 0) + 1, noSurat: "" });
+      setEditForm(data);
     }
-  }, [id]); // Dependency gunakan 'id'
+    setLoading(false);
+  }, [id]);
+
+  // FIX 2: Masukkan fetchAssetDetail ke dependency array
+  useEffect(() => {
+    if (id) fetchAssetDetail();
+  }, [id, fetchAssetDetail]);
+
+  const formatRupiah = (val: number) =>
+    new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+    }).format(val);
+
+  // --- HANDLER UPDATE PROGRES (MAJU KE DEPAN) ---
+  const handleUpdateProgress = async () => {
+    if (!asset) return;
+
+    if (!updateForm.noSurat)
+      return toast.error("Nomor Surat/Dokumen Wajib Diisi!");
+
+    setProcessing(true);
+    try {
+      const nextStepIndex = updateForm.nextStep;
+      const statusLabel =
+        TIMELINE_STEPS.find((s) => s.step === nextStepIndex)?.label ||
+        `Tahap ${nextStepIndex}`;
+
+      let suratField = "";
+      if (nextStepIndex === 2) suratField = "no_surat_ae2";
+      else if (nextStepIndex === 3) suratField = "no_surat_ae3";
+      else if (nextStepIndex === 4) suratField = "no_surat_ae4";
+      else if (nextStepIndex === 8) suratField = "no_surat_sk";
+
+      // FIX 1: Hapus 'any' dengan memberikan tipe Record
+      const updatePayload: Record<string, string | number> = {
+        current_step: nextStepIndex,
+        status: statusLabel,
+      };
+
+      if (suratField) {
+        updatePayload[suratField] = updateForm.noSurat;
+      }
+
+      const { error } = await supabase
+        .from("attb_assets")
+        .update(updatePayload)
+        .eq("id", asset.id);
+      if (error) throw error;
+
+      toast.success(`Berhasil update ke ${statusLabel}`);
+      setShowUpdateModal(false);
+      fetchAssetDetail();
+    } catch (err) {
+      console.error(err);
+      toast.error("Gagal update progress");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // --- HANDLER EDIT DATA ---
+  const handleEditData = async () => {
+    if (!asset) return;
+    setProcessing(true);
+    try {
+      const newBerat = editForm.konversi_kg || 0;
+      const newRate = editForm.rupiah_per_kg || 0;
+      const newTafsiran = newBerat * newRate;
+
+      const payload = {
+        ...editForm,
+        harga_tafsiran: newTafsiran,
+      };
+
+      const { error } = await supabase
+        .from("attb_assets")
+        .update(payload)
+        .eq("id", asset.id);
+      if (error) throw error;
+
+      toast.success("Data aset berhasil diperbarui");
+      setShowEditModal(false);
+      fetchAssetDetail();
+    } catch (err) {
+      console.error(err);
+      toast.error("Gagal menyimpan perubahan");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // --- HANDLER DOWNLOAD PDF ---
+  const handleDownloadPDF = () => {
+    if (!asset) return;
+    setDownloading(true);
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text("Laporan Detail Aset ATTB", 14, 20);
+    doc.setFontSize(10);
+    doc.text(`Dicetak pada: ${new Date().toLocaleDateString("id-ID")}`, 14, 26);
+
+    autoTable(doc, {
+      startY: 35,
+      head: [["Informasi", "Detail"]],
+      body: [
+        ["No. Aset (SAP)", asset.no_aset],
+        ["Jenis Aset", asset.jenis_aset],
+        ["Merk / Type", asset.merk_type],
+        ["Lokasi", asset.lokasi],
+        [
+          "Status Saat Ini",
+          TIMELINE_STEPS.find((s) => s.step === asset.current_step)?.label ||
+            "-",
+        ],
+        ["No. Register ATTB", asset.no_attb || "Belum Ada"],
+      ],
+      theme: "grid",
+      headStyles: { fillColor: [0, 162, 233] },
+    });
+
+    autoTable(doc, {
+      startY: (doc as jsPDFWithAutoTable).lastAutoTable.finalY + 10,
+      head: [["Parameter Teknis & Keuangan", "Nilai"]],
+      body: [
+        ["Spesifikasi", asset.spesifikasi],
+        ["Berat Material", `${asset.konversi_kg} Kg`],
+        ["Rate Scrap", formatRupiah(asset.rupiah_per_kg)],
+        ["Estimasi Harga Tafsiran", formatRupiah(asset.harga_tafsiran)],
+        ["Nilai Buku", formatRupiah(asset.nilai_buku)],
+        ["Keterangan", asset.keterangan],
+      ],
+      theme: "grid",
+      headStyles: { fillColor: [249, 168, 37] },
+    });
+
+    autoTable(doc, {
+      startY: (doc as jsPDFWithAutoTable).lastAutoTable.finalY + 10,
+      head: [["Tahapan", "Nomor Surat"]],
+      body: [
+        ["AE-1 (Inventarisasi)", asset.no_surat_ae1 || "-"],
+        ["AE-2 (Penetapan)", asset.no_surat_ae2 || "-"],
+        ["AE-3 (Usulan)", asset.no_surat_ae3 || "-"],
+        ["AE-4 (Review SPI)", asset.no_surat_ae4 || "-"],
+        ["SK Penghapusan", asset.no_surat_sk || "-"],
+      ],
+      theme: "striped",
+    });
+
+    doc.save(`Laporan_ATTB_${asset.no_aset}.pdf`);
+    setDownloading(false);
+  };
+
+  // --- HANDLER HAPUS DATA ---
+  const handleDelete = async () => {
+    if (!asset) return;
+    if (!confirm("Yakin ingin menghapus aset ini secara permanen?")) return;
+
+    setProcessing(true);
+    try {
+      const { error } = await supabase
+        .from("attb_assets")
+        .delete()
+        .eq("id", asset.id);
+      if (error) throw error;
+      toast.success("Aset berhasil dihapus");
+      router.push("/dashboard/monitoring");
+    } catch (err) {
+      // FIX 3: Gunakan variabel err
+      console.error(err);
+      toast.error("Gagal menghapus aset");
+      setProcessing(false);
+    }
+  };
 
   if (loading)
     return (
@@ -104,7 +304,6 @@ export default function AssetDetailPage({
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pln-primary"></div>
       </div>
     );
-
   if (!asset)
     return (
       <div className="flex h-screen items-center justify-center flex-col gap-4">
@@ -120,16 +319,9 @@ export default function AssetDetailPage({
       </div>
     );
 
-  const formatRupiah = (val: number) =>
-    new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-    }).format(val);
-
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* HEADER PAGE */}
+    <div className="min-h-screen bg-gray-50 pb-20 relative">
+      {/* HEADER */}
       <div className="bg-white border-b sticky top-0 z-20 px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
           <button
@@ -154,20 +346,36 @@ export default function AssetDetailPage({
           </div>
         </div>
 
-        <div className="hidden md:block">
-          <span
-            className={`px-4 py-2 rounded-full text-sm font-bold border ${asset.current_step === 5 ? "bg-green-100 text-green-700 border-green-200" : "bg-blue-600 text-white border-blue-600"}`}
+        {/* ACTION BUTTONS */}
+        <div className="flex gap-2">
+          <button
+            onClick={handleDelete}
+            className="p-2 text-red-500 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+            title="Hapus Aset Ini"
           >
-            Status: {TIMELINE_STEPS[asset.current_step - 1]?.label || "Proses"}
-          </span>
+            <Trash2 size={20} />
+          </button>
+          <button
+            onClick={() => setShowEditModal(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 shadow-sm transition-all"
+          >
+            <Edit size={16} /> Edit Data
+          </button>
+          {asset.current_step < 8 && (
+            <button
+              onClick={() => setShowUpdateModal(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-pln-primary rounded-lg hover:bg-blue-700 shadow-md transition-all active:scale-95"
+            >
+              <CheckCircle size={16} /> Update Progres
+            </button>
+          )}
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* KOLOM KIRI: FOTO & DATA */}
+        {/* KOLOM KIRI: INFO ASET */}
         <div className="lg:col-span-2 space-y-6">
-          {/* FOTO BESAR */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden relative group">
             <div className="relative w-full h-[400px] bg-gray-100 flex items-center justify-center">
               {asset.foto_url ? (
                 <Image
@@ -186,7 +394,6 @@ export default function AssetDetailPage({
             </div>
           </div>
 
-          {/* DETAIL DATA */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2 flex items-center gap-2">
               <FileText size={20} className="text-pln-primary" /> Spesifikasi &
@@ -224,6 +431,14 @@ export default function AssetDetailPage({
                   {formatRupiah(asset.harga_tafsiran || 0)}
                 </p>
               </div>
+              <div>
+                <p className="text-xs text-gray-400 uppercase font-bold">
+                  Nilai Buku
+                </p>
+                <p className="text-lg font-bold text-gray-800">
+                  {formatRupiah(asset.nilai_buku || 0)}
+                </p>
+              </div>
               <div className="md:col-span-2 bg-gray-50 p-4 rounded-lg border border-gray-100">
                 <p className="text-xs text-gray-400 uppercase font-bold">
                   Keterangan
@@ -236,7 +451,7 @@ export default function AssetDetailPage({
           </div>
         </div>
 
-        {/* KOLOM KANAN: TIMELINE */}
+        {/* KOLOM KANAN: TRACKING */}
         <div className="space-y-6">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
@@ -246,40 +461,25 @@ export default function AssetDetailPage({
               {TIMELINE_STEPS.map((item) => {
                 const isCompleted = asset.current_step > item.step;
                 const isActive = asset.current_step === item.step;
-                let surat = "";
 
-                // Cek Surat per Step
+                let surat = "";
                 if (item.step === 1) surat = asset.no_surat_ae1;
                 else if (item.step === 2) surat = asset.no_surat_ae2;
                 else if (item.step === 3) surat = asset.no_surat_ae3;
                 else if (item.step === 4) surat = asset.no_surat_ae4;
-                else if (item.step === 5) surat = asset.no_surat_sk;
+                else if (item.step === 8) surat = asset.no_surat_sk;
 
                 return (
                   <div key={item.step} className="relative pl-8">
-                    {/* DOT STATUS */}
                     <div
-                      className={`absolute -left-[9px] top-0 w-5 h-5 rounded-full border-4 ${
-                        isCompleted
-                          ? "bg-green-500 border-white"
-                          : isActive
-                            ? "bg-blue-500 border-white animate-pulse"
-                            : "bg-gray-200 border-white"
-                      }`}
+                      className={`absolute -left-[9px] top-0 w-5 h-5 rounded-full border-4 ${isCompleted ? "bg-green-500 border-white" : isActive ? "bg-blue-500 border-white animate-pulse" : "bg-gray-200 border-white"}`}
                     ></div>
-
                     <h4
-                      className={`text-sm font-bold ${
-                        isCompleted || isActive
-                          ? "text-gray-800"
-                          : "text-gray-400"
-                      }`}
+                      className={`text-sm font-bold ${isCompleted || isActive ? "text-gray-800" : "text-gray-400"}`}
                     >
                       {item.label}
                     </h4>
                     <p className="text-xs text-gray-400 mb-1">{item.desc}</p>
-
-                    {/* LABEL SURAT */}
                     {surat && (
                       <div className="mt-1 inline-flex items-center gap-1 px-2 py-1 bg-gray-50 border rounded text-xs font-mono text-gray-600">
                         <Hash size={10} /> {surat}
@@ -304,13 +504,228 @@ export default function AssetDetailPage({
                   {asset.no_attb || "Belum Ada"}
                 </p>
               </div>
-              {asset.no_attb && (
-                <Download className="text-yellow-600 cursor-pointer hover:scale-110 transition-transform" />
-              )}
+              <button
+                onClick={handleDownloadPDF}
+                disabled={downloading}
+                className="p-2 bg-yellow-100 hover:bg-yellow-200 rounded-full text-yellow-700 transition-all active:scale-95 disabled:opacity-50"
+              >
+                {downloading ? (
+                  <Loader2 size={24} className="animate-spin" />
+                ) : (
+                  <Download size={24} />
+                )}
+              </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* MODAL UPDATE PROGRESS */}
+      {showUpdateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 relative">
+            <button
+              onClick={() => setShowUpdateModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+              <X size={20} />
+            </button>
+            <h3 className="text-xl font-bold text-gray-800 mb-4">
+              Update Tahapan Aset
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-600 mb-1">
+                  Tahap Selanjutnya
+                </label>
+                <select
+                  className="w-full p-2 border rounded-lg bg-gray-50"
+                  value={updateForm.nextStep}
+                  onChange={(e) =>
+                    setUpdateForm({
+                      ...updateForm,
+                      nextStep: parseInt(e.target.value),
+                    })
+                  }
+                >
+                  {TIMELINE_STEPS.map((s) => (
+                    <option
+                      key={s.step}
+                      value={s.step}
+                      disabled={s.step <= asset.current_step}
+                    >
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-600 mb-1">
+                  Nomor Surat Pendukung
+                </label>
+                <input
+                  type="text"
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="Contoh: 002/BA-PENETAPAN/2026"
+                  value={updateForm.noSurat}
+                  onChange={(e) =>
+                    setUpdateForm({ ...updateForm, noSurat: e.target.value })
+                  }
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  *Nomor surat wajib diisi untuk validasi perpindahan tahap.
+                </p>
+              </div>
+              <button
+                onClick={handleUpdateProgress}
+                disabled={processing}
+                className="w-full bg-pln-primary text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all flex justify-center gap-2"
+              >
+                {processing ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  "Simpan & Lanjutkan"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDIT DATA */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowEditModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+              <X size={20} />
+            </button>
+            <h3 className="text-xl font-bold text-gray-800 mb-4">
+              Edit Data Aset
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-500">
+                  Jenis Aset
+                </label>
+                <input
+                  type="text"
+                  className="w-full p-2 border rounded"
+                  value={editForm.jenis_aset || ""}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, jenis_aset: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-500">
+                  Merk / Type
+                </label>
+                <input
+                  type="text"
+                  className="w-full p-2 border rounded"
+                  value={editForm.merk_type || ""}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, merk_type: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-1 md:col-span-2">
+                <label className="text-xs font-bold text-gray-500">
+                  Lokasi
+                </label>
+                <input
+                  type="text"
+                  className="w-full p-2 border rounded"
+                  value={editForm.lokasi || ""}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, lokasi: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-1 md:col-span-2">
+                <label className="text-xs font-bold text-gray-500">
+                  Spesifikasi
+                </label>
+                <textarea
+                  className="w-full p-2 border rounded"
+                  rows={3}
+                  value={editForm.spesifikasi || ""}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, spesifikasi: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-500">
+                  Nilai Buku (Rp)
+                </label>
+                <input
+                  type="number"
+                  className="w-full p-2 border rounded"
+                  value={editForm.nilai_buku || 0}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      nilai_buku: parseFloat(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-blue-600">
+                  Berat (Kg) [Untuk Hitung Scrap]
+                </label>
+                <input
+                  type="number"
+                  className="w-full p-2 border border-blue-200 bg-blue-50 rounded"
+                  value={editForm.konversi_kg || 0}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      konversi_kg: parseFloat(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-1 md:col-span-2">
+                <label className="text-xs font-bold text-gray-500">
+                  Keterangan
+                </label>
+                <textarea
+                  className="w-full p-2 border rounded"
+                  rows={2}
+                  value={editForm.keterangan || ""}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, keterangan: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleEditData}
+                disabled={processing}
+                className="px-6 py-2 bg-pln-primary text-white font-bold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+              >
+                {processing ? (
+                  <Loader2 className="animate-spin" size={18} />
+                ) : (
+                  "Simpan Perubahan"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

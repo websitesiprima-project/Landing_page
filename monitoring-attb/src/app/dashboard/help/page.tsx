@@ -11,9 +11,9 @@ import {
   Edit,
   Trash2,
   TrendingUp,
-  Scale, // Icon untuk Hukum
-  ScrollText, // Icon untuk Dokumen/Prosedur
-  ShieldCheck, // Icon untuk Syarat
+  Scale,
+  ScrollText,
+  ShieldCheck,
   ChevronDown,
 } from "lucide-react";
 
@@ -27,49 +27,65 @@ export default function HelpPage() {
         </h1>
         <p className="text-gray-500 mt-2">
           Dokumentasi standar operasional prosedur (SOP) dan dasar pengetahuan
-          Monitoring ATTB.
+          Monitoring ATTB (8 Tahapan).
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* KOLOM KIRI: KONTEN UTAMA */}
         <div className="lg:col-span-2 space-y-6">
-          {/* 1. VISUALISASI ALUR (YANG LAMA) */}
+          {/* 1. VISUALISASI ALUR (UPDATE: 8 TAHAP) */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
               <TrendingUp className="text-pln-primary" /> Ringkasan Alur Proses
+              (8 Tahap)
             </h3>
             <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-300 before:to-transparent">
               <StepItem
                 number="1"
-                title="Inventarisasi UP (AE-1)"
-                desc="Penelitian Tim UP atas aset rusak & pengusulan penarikan."
+                title="Inventarisasi (AE-1)"
+                desc="Penelitian fisik & administratif aset yang rusak/tidak beroperasi."
               />
               <StepItem
                 number="2"
-                title="Penetapan UPI (AE-2)"
-                desc="Penelitian Tim UPI (Level 1) & penetapan status ATTB."
+                title="Penetapan Status (AE-2)"
+                desc="Aset resmi ditetapkan menjadi ATTB (Aset Tetap Tidak Beroperasi)."
               />
               <StepItem
                 number="3"
-                title="Review SPI (AE-4)"
-                desc="Penelitian bersama Tim UPI & SPI (Audit kelayakan)."
+                title="Usulan Penghapusan (AE-3)"
+                desc="Pengajuan usulan penghapusan dari Unit ke Kantor Pusat/Divisi."
               />
               <StepItem
                 number="4"
-                title="Verifikasi Pusat & SK"
-                desc="Verifikasi Div. Akuntansi & persetujuan Direksi/Dekom/RUPS."
+                title="Review SPI (AE-4)"
+                desc="Audit dan review kelayakan penghapusan oleh Satuan Pengawas Internal."
               />
               <StepItem
                 number="5"
-                title="Penghapusan (AE-5)"
-                desc="Eksekusi penghapusbukuan setelah persetujuan turun."
+                title="Persetujuan Dekomisioning"
+                desc="Persetujuan teknis pembongkaran aset dari sistem."
+              />
+              <StepItem
+                number="6"
+                title="Proses Lelang"
+                desc="Penjualan aset melalui mekanisme lelang negara/internal."
+              />
+              <StepItem
+                number="7"
+                title="Pengangkutan"
+                desc="Aset diambil oleh pemenang lelang atau dipindahkan dari lokasi."
+              />
+              <StepItem
+                number="8"
+                title="Selesai (SK Penghapusan)"
+                desc="Penerbitan SK Penghapusan & aset dihapus dari buku (Write-off)."
                 isLast
               />
             </div>
           </div>
 
-          {/* 2. DEFINISI & DASAR HUKUM (BARU) */}
+          {/* 2. DEFINISI & DASAR HUKUM */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
               <Scale className="text-pln-primary" /> Dasar Hukum & Pengertian
@@ -108,15 +124,11 @@ export default function HelpPage() {
                 <li>
                   PERDIR No. 0116.K/DIR/2017 (Pedoman Kebijakan Akuntansi)
                 </li>
-                <li>
-                  Surat Kadiv Akuntansi No. 1624/KEU.02.03/DIVAKT/2015 (Revisi
-                  Formulir AE)
-                </li>
               </ul>
             </div>
           </div>
 
-          {/* 3. SYARAT PENARIKAN (BARU) */}
+          {/* 3. SYARAT PENARIKAN */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
               <ShieldCheck className="text-pln-primary" /> Syarat Penarikan Aset
@@ -146,106 +158,82 @@ export default function HelpPage() {
             </div>
           </div>
 
-          {/* 4. DETAIL PROSEDUR (EXPANDABLE - BARU) */}
+          {/* 4. DETAIL PROSEDUR (EXPANDABLE) */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
-              <ScrollText className="text-pln-primary" /> Detail Prosedur (SOP
-              Lengkap)
+              <ScrollText className="text-pln-primary" /> Detail Prosedur Teknis
             </h3>
             <details className="group bg-gray-50 rounded-lg border border-gray-200">
               <summary className="flex justify-between items-center font-medium cursor-pointer list-none p-4 text-sm text-gray-700 hover:bg-gray-100 transition-colors">
-                <span>Klik untuk melihat 27 Tahapan Lengkap</span>
+                <span>Klik untuk melihat Detail Langkah Kerja</span>
                 <span className="transition group-open:rotate-180">
                   <ChevronDown size={16} />
                 </span>
               </summary>
-              <div className="text-xs text-gray-600 p-4 pt-0 border-t border-gray-200 space-y-2 leading-relaxed h-96 overflow-y-auto custom-scrollbar">
+              <div className="text-xs text-gray-600 p-4 pt-0 border-t border-gray-200 space-y-2 leading-relaxed h-80 overflow-y-auto custom-scrollbar">
                 <ol className="list-decimal pl-4 space-y-2">
-                  <li>Pembentukan Tim Penarikan Aset Tetap di Tingkat UP.</li>
-                  <li>Laporan dari pengguna/inventarisasi aset rusak.</li>
-                  <li>Bagian Fasilitas mengusulkan ke Manajer UP.</li>
-                  <li>Manajer UP menugaskan Tim Penarikan UP meneliti aset.</li>
                   <li>
-                    <strong>Tim UP menerbitkan dokumen AE.1 dan AE 1.1.</strong>
+                    <strong>Tahap 1 (Inventarisasi):</strong> Tim UP melakukan
+                    sensus aset fisik. Menerbitkan BA Penelitian Aset (Formulir
+                    AE-1).
+                  </li>
+                  {/* FIX: Menggunakan &apos; pengganti tanda kutip tunggal */}
+                  <li>
+                    <strong>Tahap 2 (Penetapan):</strong> Berdasarkan AE-1,
+                    status aset di SAP diubah menjadi &apos;Not In
+                    Operation&apos;. Terbit Dokumen AE-2.
                   </li>
                   <li>
-                    Manajer UP mengusulkan ke UI dengan Surat Pengantar (AE.3
-                    dan AE.3.1).
-                  </li>
-                  <li>GM UPI menugaskan Tim Penarikan UPI meneliti usulan.</li>
-                  <li>Tim UPI melakukan penelitian (Level 1).</li>
-                  <li>
-                    <strong>
-                      Penerbitan dokumen AE 2 dan AE 2.1 (Penetapan Status
-                      ATTB).
-                    </strong>
+                    <strong>Tahap 3 (Usulan):</strong> Unit Induk (UIW/UID)
+                    mengajukan usulan penghapusan ke Kantor Pusat (Divisi
+                    Akuntansi). Dokumen AE-3.
                   </li>
                   <li>
-                    Fungsi Akuntansi UP memindahkan status aset Operasi ke ATTB
-                    (Max 5 hari kerja).
+                    <strong>Tahap 4 (Review SPI):</strong> Satuan Pengawas
+                    Internal (SPI) melakukan audit kepatuhan dan kewajaran
+                    nilai. Terbit AE-4.
                   </li>
                   <li>
-                    Tim UPI menyiapkan AE 3 dan AE 3.1 untuk usulan ke SPI.
-                  </li>
-                  <li>Penelitian bersama Tim UPI dan SPI.</li>
-                  <li>
-                    <strong>Penerbitan dokumen AE 4 dan AE 4.1.</strong>
+                    <strong>Tahap 5 (Dekomisioning):</strong> Persetujuan teknis
+                    untuk membongkar aset dari jaringan (jika masih terpasang).
                   </li>
                   <li>
-                    Tim UPI menyiapkan dokumen pendukung (Pakta Integritas,
-                    Kajian Hukum/Finansial, Foto).
+                    <strong>Tahap 6 (Lelang):</strong> Proses penilaian harga
+                    limit (KJPP) dan pelaksanaan lelang melalui KPKNL atau
+                    internal.
                   </li>
-                  <li>UPI mengirim Usulan ke Kantor Pusat (Div Akuntansi).</li>
-                  <li>Div. Akuntansi memverifikasi dokumen.</li>
                   <li>
-                    Div. Akuntansi menyiapkan SK Direksi & Surat Persetujuan.
+                    <strong>Tahap 7 (Pengangkutan):</strong> Pembeli/Pemenang
+                    lelang mengangkut material dari gudang/lokasi. Dibuatkan
+                    Berita Acara Serah Terima.
                   </li>
-                  <li>Direksi mengajukan ke Dewan Komisaris (Dekom).</li>
                   <li>
-                    Dekom memberikan persetujuan (masa manfaat &lt; 5 thn) atau
-                    rekomendasi (&gt; 5 thn).
+                    <strong>Tahap 8 (Penghapusan):</strong> Penerbitan SK
+                    Penghapusan oleh Direksi. Aset dihapus (Write-off) dari
+                    pembukuan perusahaan.
                   </li>
-                  <li>Surat Dekom disampaikan ke Direksi.</li>
-                  <li>Div. Akuntansi meneruskan persetujuan Dekom ke UPI.</li>
-                  <li>
-                    Untuk aset &gt; 5 tahun, Direksi menyurat ke RUPS
-                    (Kementerian BUMN).
-                  </li>
-                  <li>Kementerian BUMN memberikan persetujuan.</li>
-                  <li>Div. Akuntansi meneruskan persetujuan BUMN ke UPI.</li>
-                  <li>
-                    Div. Akuntansi menyurat ke KSPI untuk penelitian kembali.
-                  </li>
-                  <li>Tim UPI & SPI Regional melakukan penelitian akhir.</li>
-                  <li>
-                    <strong>
-                      Penerbitan dokumen AE.5 dan AE.5.1 (Berita Acara
-                      Penghapusan).
-                    </strong>
-                  </li>
-                  <li>UPI melaporkan tindak lanjut secara periodik.</li>
                 </ol>
               </div>
             </details>
           </div>
 
-          {/* 5. FAQ (YANG LAMA) */}
+          {/* 5. FAQ */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
               <HelpCircle className="text-pln-primary" /> FAQ (Tanya Jawab)
             </h3>
             <div className="space-y-4">
               <FaqItem
-                q="Kapan formulir AE-1 dibuat?"
-                a="AE-1 dibuat saat Tim UP selesai melakukan penelitian fisik terhadap aset yang rusak/tidak beroperasi."
+                q="Apa bedanya AE-1 dan AE-2?"
+                a="AE-1 adalah hasil penelitian fisik (barang ada/rusak). AE-2 adalah dokumen legal perubahan status akuntansi menjadi ATTB."
               />
               <FaqItem
-                q="Apa fungsi AE-2?"
-                a="AE-2 adalah dokumen penetapan resmi perubahan status dari Aset Operasi menjadi Aset Tetap Tidak Beroperasi (ATTB)."
+                q="Apakah aset di Tahap 5 sudah boleh dijual?"
+                a="Belum. Tahap 5 baru persetujuan bongkar. Penjualan baru boleh dilakukan setelah proses Lelang (Tahap 6) selesai."
               />
               <FaqItem
-                q="Apa itu Nilai Tafsiran?"
-                a="Nilai Tafsiran adalah perkiraan harga jual aset (scrap value) berdasarkan berat (Kg) dikali harga pasaran logam saat ini (Rp 4.300/kg)."
+                q="Bagaimana jika salah input tahap?"
+                a="Gunakan fitur 'Revert Tahap' di menu Progress atau Monitoring untuk mengembalikan aset ke tahapan sebelumnya."
               />
             </div>
           </div>
@@ -258,19 +246,23 @@ export default function HelpPage() {
             <ul className="space-y-3">
               <FeatureItem
                 icon={<Edit size={16} />}
-                text="Edit Data Teknis & Foto"
+                text="Edit Data & Foto Aset"
+              />
+              <FeatureItem
+                icon={<CheckCircle size={16} />}
+                text="Update Progress Bertahap"
               />
               <FeatureItem
                 icon={<Trash2 size={16} />}
-                text="Hapus Usulan (Admin Only)"
+                text="Hapus / Revert Usulan"
               />
               <FeatureItem
                 icon={<Printer size={16} />}
-                text="Cetak PDF Berita Acara"
+                text="Cetak PDF Laporan Aset"
               />
               <FeatureItem
                 icon={<FileText size={16} />}
-                text="Export Laporan Excel"
+                text="Export Monitoring Excel"
               />
             </ul>
           </div>
@@ -280,9 +272,9 @@ export default function HelpPage() {
               <AlertTriangle size={18} /> Perhatian
             </h3>
             <p className="text-sm text-yellow-800 opacity-90 leading-relaxed">
-              Setiap perubahan status aset akan tercatat di sistem Log. Pastikan
-              dokumen fisik (Berita Acara Manual) sudah lengkap sebelum
-              memajukan tahapan ke level berikutnya.
+              Pastikan dokumen fisik (Berita Acara) sudah lengkap dan
+              ditandatangani sebelum memindahkan aset ke tahap selanjutnya di
+              sistem ini.
             </p>
           </div>
 
@@ -292,7 +284,7 @@ export default function HelpPage() {
               Jika terjadi kendala sistem, hubungi:
             </p>
             <div className="font-mono text-sm bg-gray-100 p-2 rounded text-center">
-              admin.aset@pln.co.id
+              websitesiprima@gmail.com
             </div>
           </div>
         </div>

@@ -48,7 +48,7 @@ export default function LandingPage() {
             {/* 2. Tombol Kembali ke Portal */}
             {/* Menggunakan <a> biasa karena pindah port (misal ke :3000) */}
             <a
-              href="https://pln-portal-mocha.vercel.app/"
+              href="https://portal-utama.vercel.app/"
               className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-medium text-sm transition-colors group"
             >
               <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-slate-200 transition-colors">

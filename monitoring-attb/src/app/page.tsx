@@ -95,7 +95,7 @@ export default function LandingPage() {
 
           <div className="flex items-center gap-4">
             <a
-              href="https://pln-portal-mocha.vercel.app/"
+              href="https://portal-utama.vercel.app/"
               className="hidden md:flex items-center gap-2 text-sm font-medium text-white/80 hover:text-white transition-colors"
             >
               <ArrowLeft size={16} /> Kembali ke Portal

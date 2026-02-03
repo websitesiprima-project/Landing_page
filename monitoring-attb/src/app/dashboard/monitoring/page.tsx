@@ -38,6 +38,41 @@ interface Asset {
   [key: string]: string | number | null | undefined;
 }
 
+// 1. DAFTAR LENGKAP KATEGORI ASET (REFERENSI)
+// Meskipun tabel menampilkan angka, map ini berguna untuk referensi sistem.
+const ASSET_CATEGORY_MAP: Record<string, string> = {
+  "10100": "Tanah & hak atas tanah",
+  "10200": "Bangunan & kelengkap",
+  "10300": "Bangunan saluran air",
+  "10400": "Jalan dan sepur samp",
+  "10500": "Instalasi dan mesin",
+  "10510": "Ins & Mesin Cina",
+  "10520": "Ins & Mesin Non-Cina",
+  "10600": "Plngk penyaluran TL",
+  "10700": "Gardu Induk",
+  "10800": "SUTT",
+  "10900": "Kabel di bawah tanah",
+  "11000": "Jaringan distribusi",
+  "11010": "Penghantar jaringan",
+  "11020": "Peralatan jaringan",
+  "11030": "Tiang",
+  "11100": "Gardu distribusi",
+  "11110": "Gardu distribusi",
+  "11120": "Fasilitas 20 KV-GI",
+  "11130": "Trafo",
+  "11200": "Plngk lain2 distribu",
+  "11300": "Plngk pgolah data",
+  "11400": "Plngk transmisi data",
+  "11450": "Teleinformasi Data",
+  "11500": "Perlengkapan khusus",
+  "11600": "Perlengkapan telekom",
+  "11700": "Perlengkapan umum",
+  "11750": "Peralatan Kerja",
+  "11800": "Kendaraan bermotor &",
+  "11900": "Kapal & Prlngkapanya",
+  "40700": "Gardu Induk", // Tambahan khusus
+};
+
 // Helper untuk status text
 const getStatusLabel = (step: number) => {
   if (step === 8) return "Selesai";
@@ -76,8 +111,11 @@ export default function MonitoringTablePage() {
 
       if (error) throw error;
 
+      // MAPPING DATA
       const mappedData: Asset[] = (assets || []).map((item: Asset) => ({
         ...item,
+        // TAMPILKAN ANGKA SAJA (Sesuai Request)
+        jenis_aset: String(item.jenis_aset || "").trim(),
         status_text: getStatusLabel(item.current_step),
       }));
 
@@ -171,13 +209,13 @@ export default function MonitoringTablePage() {
     setColumnFilters(newFilters);
   };
 
-  // --- COMPONENT HEADER EXCEL-STYLE (UPDATED) ---
+  // --- COMPONENT HEADER EXCEL-STYLE ---
   const ColumnHeader = ({
     label,
     field,
     width,
     isStatus = false,
-    className = "bg-gray-50", // Default bg color
+    className = "bg-gray-50",
   }: {
     label: string;
     field: keyof Asset | "status_text";
@@ -265,10 +303,16 @@ export default function MonitoringTablePage() {
                 {uniqueValues.map((val, idx) => {
                   const isChecked =
                     isAllSelected || activeFilter?.includes(val);
+                  // Fitur Tambahan: Tooltip menampilkan Nama Kategori (jika ada) saat hover di filter
+                  const tooltipText = ASSET_CATEGORY_MAP[val]
+                    ? `${val} - ${ASSET_CATEGORY_MAP[val]}`
+                    : val;
+
                   return (
                     <label
                       key={idx}
                       className="flex items-center gap-2 px-2 py-1 hover:bg-blue-50 rounded cursor-pointer"
+                      title={tooltipText}
                     >
                       <input
                         type="checkbox"
@@ -288,10 +332,7 @@ export default function MonitoringTablePage() {
                         }}
                         className="rounded text-pln-primary focus:ring-0"
                       />
-                      <span
-                        className="text-sm text-gray-700 truncate"
-                        title={val}
-                      >
+                      <span className="text-sm text-gray-700 truncate">
                         {val}
                       </span>
                     </label>
@@ -349,7 +390,7 @@ export default function MonitoringTablePage() {
     );
   };
 
-  // Helper simple sort untuk kolom non-filter
+  // Helper simple sort
   const SimpleSortHeader = ({
     label,
     field,
@@ -449,16 +490,19 @@ export default function MonitoringTablePage() {
 
                 {/* 2. FILTERABLE COLUMNS */}
                 <ColumnHeader
-                  label="No. Surat ATTB"
+                  label="No. ATTB"
                   field="no_attb"
                   width="200px"
                   className="bg-cyan-50/50"
                 />
+
+                {/* KATEGORI ASET: TAMPIL ANGKA/KODE SAJA */}
                 <ColumnHeader
-                  label="Kategori Aset"
+                  label="Kategori Aset (AT Class)"
                   field="jenis_aset"
                   width="250px"
                 />
+
                 <SimpleSortHeader
                   label="Merk / Type"
                   field="merk_type"
@@ -492,7 +536,7 @@ export default function MonitoringTablePage() {
                   className="text-center"
                 />
 
-                {/* KOLOM SURAT LAINNYA (SEKARANG SUDAH BISA FILTER) */}
+                {/* KOLOM SURAT */}
                 <ColumnHeader
                   label="No. Surat AE-1"
                   field="no_surat_ae1"
@@ -550,9 +594,15 @@ export default function MonitoringTablePage() {
                   <td className="p-4 text-xs font-mono text-cyan-700 font-bold bg-cyan-50/10 border-x border-gray-100">
                     {item.no_attb || "-"}
                   </td>
-                  <td className="p-4 font-medium text-gray-800 text-base">
+
+                  {/* TAMPIL ANGKA KODE ASET */}
+                  <td
+                    className="p-4 font-medium text-gray-800 text-base"
+                    title={ASSET_CATEGORY_MAP[item.jenis_aset]}
+                  >
                     {item.jenis_aset}
                   </td>
+
                   <td className="p-4 text-gray-600">{item.merk_type}</td>
                   <td className="p-4 text-gray-600 flex items-center gap-1">
                     📍 {item.lokasi}

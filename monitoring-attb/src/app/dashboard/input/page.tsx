@@ -15,25 +15,47 @@ import { toast } from "react-hot-toast";
 import Link from "next/link";
 import ExcelJS from "exceljs";
 
+// --- 1. MAPPING KATEGORI (LENGKAP SESUAI DATA SHEET 2) ---
+const ASSET_CATEGORY_MAP: Record<string, string> = {
+  "10100": "Tanah & hak atas tanah",
+  "10200": "Bangunan & kelengkap",
+  "10300": "Bangunan saluran air",
+  "10400": "Jalan dan sepur samp",
+  "10500": "Instalasi dan mesin",
+  "10510": "Ins & Mesin Cina",
+  "10520": "Ins & Mesin Non-Cina",
+  "10600": "Plngk penyaluran TL",
+  "10700": "Gardu Induk",
+  "10800": "SUTT",
+  "10900": "Kabel di bawah tanah",
+  "11000": "Jaringan distribusi",
+  "11010": "Penghantar jaringan",
+  "11020": "Peralatan jaringan",
+  "11030": "Tiang",
+  "11100": "Gardu distribusi",
+  "11110": "Gardu distribusi",
+  "11120": "Fasilitas 20 KV-GI",
+  "11130": "Trafo",
+  "11200": "Plngk lain2 distribu",
+  "11300": "Plngk pgolah data",
+  "11400": "Plngk transmisi data",
+  "11450": "Teleinformasi Data",
+  "11500": "Perlengkapan khusus",
+  "11600": "Perlengkapan telekom",
+  "11700": "Perlengkapan umum",
+  "11750": "Peralatan Kerja",
+  "11800": "Kendaraan bermotor &",
+  "11900": "Kapal & Prlngkapanya",
+  "40700": "Gardu Induk",
+};
+
+// Pilihan Manual di Dropdown
 const assetCategories = [
   { label: "Trafo Tenaga (Power Transformer)", value: "Trafo Tenaga" },
   { label: "PMT (Pemutus Tenaga / Circuit Breaker)", value: "PMT" },
-  { label: "PMS (Pemisah / Disconnector)", value: "PMS" },
-  {
-    label: "Instrument Transformer (CT / PT)",
-    value: "Instrument Transformer",
-  },
-  { label: "Lightning Arrester (LA)", value: "Lightning Arrester" },
-  { label: "Kubikel 20kV & Panel Kontrol", value: "Kubikel & Panel" },
-  { label: "Baterai & Rectifier", value: "Baterai & Rectifier" },
-  { label: "Serandang & Isolator", value: "Serandang & Isolator" },
-  { label: "Kendaraan Bermotor", value: "Kendaraan Bermotor" },
-  {
-    label: "Peralatan Kantor & Inventaris",
-    value: "Peralatan Kantor & Inventaris",
-  },
 ];
 
+// HELPER: Mengubah string "1.000.000" jadi number 1000000
 const formatNumber = (num: number) =>
   new Intl.NumberFormat("id-ID").format(num);
 const parseNumber = (str: string) =>
@@ -50,7 +72,7 @@ export default function InputAssetPage() {
   const [formData, setFormData] = useState({
     no_aset: "",
     no_surat_ae1: "",
-    jenis_aset: assetCategories[0].value,
+    jenis_aset: "",
     merk_type: "",
     spesifikasi: "",
     jumlah: 1,
@@ -115,7 +137,7 @@ export default function InputAssetPage() {
     if (e.target.files && e.target.files[0]) setImageFile(e.target.files[0]);
   };
 
-  // --- IMPORT EXCEL (UPDATED MAPPING) ---
+  // --- IMPORT EXCEL ---
   const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0]) return;
     setImporting(true);
@@ -125,7 +147,7 @@ export default function InputAssetPage() {
       const buffer = await file.arrayBuffer();
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(buffer);
-      const worksheet = workbook.getWorksheet(1);
+      const worksheet = workbook.getWorksheet(1); // Sheet1
       if (!worksheet) throw new Error("Sheet tidak ditemukan.");
 
       const {
@@ -153,6 +175,7 @@ export default function InputAssetPage() {
         no_surat_ae2: string;
         no_surat_ae3: string;
         no_surat_ae4: string;
+        no_surat_sk: string;
         konversi_kg: number;
         rupiah_per_kg: number;
         harga_tafsiran: number;
@@ -160,66 +183,106 @@ export default function InputAssetPage() {
         current_step: number;
         foto_url: null;
         input_by: string;
+        keterangan: string;
+        no_attb: string;
       }
       const newAssetsToInsert: AssetInsert[] = [];
 
-      // Loop Baris
+      // Loop Baris (MULAI DARI BARIS 24)
       worksheet.eachRow((row, rowNumber) => {
-        // REQUEST: Mulai dari Baris 26
-        if (rowNumber < 26) return;
+        if (rowNumber < 24) return;
 
-        // --- MAPPING KOLOM (SESUAI REQUEST) ---
-        // A (1) = No Aset (SAP)
-        // G (7) = Lokasi (REQUEST BARU)
-        // F (6) = Jenis Aset (Description)
-        // H (8) = Merk/Type
-        // I (9) = Spesifikasi (Main No Text)
-        // M (13) = Nilai Buku (Sesuai request sebelumnya)
-        // P (16) = AE.1 (No Surat)
-
+        // --- MAPPING KOLOM ---
         const noAsetRaw = row.getCell(1).text
           ? row.getCell(1).text.toString().trim()
           : "";
+        if (!noAsetRaw || existingNos.has(noAsetRaw)) return;
 
-        if (!noAsetRaw || existingNos.has(noAsetRaw)) {
-          return;
+        // 1. MAPPING JENIS ASET
+        const atClassCode = row.getCell(2).text
+          ? row.getCell(2).text.toString().trim()
+          : "";
+        const assetClassName = row.getCell(3).text
+          ? row.getCell(3).text.toString().trim()
+          : "";
+
+        let finalJenisAset = assetClassName;
+        if (atClassCode && ASSET_CATEGORY_MAP[atClassCode]) {
+          finalJenisAset = ASSET_CATEGORY_MAP[atClassCode];
         }
+        if (!finalJenisAset || finalJenisAset === "-") {
+          finalJenisAset = row.getCell(7).text || "Aset Tetap";
+        }
+
+        // 2. MAPPING NO ATTB (Kolom D)
+        const noAttbRaw = row.getCell(4).text
+          ? row.getCell(4).text.toString().trim()
+          : "";
 
         const beratEstimasi = 0;
 
+        // 3. TENTUKAN STATUS STEP
+        let currentStep = 1;
+        let status = "Tahap 1: Inventarisasi (AE-1)";
+
+        const ae1 = row.getCell(25).text || row.getCell(18).text;
+        const ae2 = row.getCell(26).text;
+        const ae3 = row.getCell(27).text;
+        const ae4 = row.getCell(28).text;
+
+        if (ae4) {
+          currentStep = 4;
+          status = "Tahap 4: Review SPI (AE-4)";
+        } else if (ae3) {
+          currentStep = 3;
+          status = "Tahap 3: Usulan (AE-3)";
+        } else if (ae2) {
+          currentStep = 2;
+          status = "Tahap 2: Penetapan (AE-2)";
+        }
+
         newAssetsToInsert.push({
           no_aset: noAsetRaw,
-          jenis_aset: row.getCell(6).text || "Aset Tetap",
-          lokasi: row.getCell(7).text || "-", // UPDATED: Kolom G
-          merk_type: row.getCell(8).text || "-",
-          spesifikasi: row.getCell(9).text || "-",
-          jumlah: parseInt(row.getCell(10).text) || 1,
-          satuan: row.getCell(11).text || "Unit",
+          jenis_aset: finalJenisAset,
+          lokasi: row.getCell(8).text || "-",
+          merk_type: row.getCell(9).text || "-",
+          spesifikasi: row.getCell(10).text || "-",
+          jumlah: parseInt(row.getCell(11).text) || 1,
+          satuan: row.getCell(12).text || "Unit",
 
           tahun_perolehan: 2010,
-          nilai_perolehan: 0,
-          nilai_buku: parseFloat(row.getCell(13).text) || 0, // Kolom M
+
+          // PERBAIKAN: Gunakan parseNumber untuk menangani format "2.123.456"
+          nilai_perolehan: parseNumber(row.getCell(14).text), // Kolom N
+          nilai_buku: parseNumber(row.getCell(14).text), // Kolom N (End Acq Value)
 
           // Surat-surat
-          no_surat_ae1: row.getCell(16).text || "",
-          no_surat_ae2: row.getCell(17).text || "",
-          no_surat_ae3: row.getCell(18).text || "",
-          no_surat_ae4: row.getCell(19).text || "",
+          no_surat_ae1: ae1 || "",
+          no_surat_ae2: ae2 || "",
+          no_surat_ae3: ae3 || "",
+          no_surat_ae4: ae4 || "",
+          no_surat_sk: "",
+
+          no_attb: noAttbRaw,
 
           konversi_kg: beratEstimasi,
           rupiah_per_kg: 4300,
           harga_tafsiran: beratEstimasi * 4300,
-          status: "Tahap 1: BA Hasil Penelitian (AE-1)",
-          current_step: 1,
+
+          status: status,
+          current_step: currentStep,
+
           foto_url: null,
           input_by: user.id,
+          keterangan: row.getCell(17).text || "",
         });
       });
 
       if (newAssetsToInsert.length === 0) {
-        toast("Tidak ada data baru. Cek apakah data dimulai dari baris 26?", {
-          icon: "ℹ️",
-        });
+        toast(
+          "Tidak ada data baru yang valid (mulai baris 24) atau semua data sudah ada.",
+          { icon: "ℹ️" },
+        );
         return;
       }
 
@@ -266,13 +329,14 @@ export default function InputAssetPage() {
         foto_url = data.publicUrl;
       }
 
+      const finalJenis = manualJenis || formData.jenis_aset || "Aset Umum";
+
       const payload = {
         ...formData,
-        spesifikasi: manualJenis
-          ? `[KODE: ${manualJenis}] \n${formData.spesifikasi}`
-          : formData.spesifikasi,
+        jenis_aset: finalJenis,
+        spesifikasi: formData.spesifikasi,
         foto_url: foto_url || null,
-        status: "Tahap 1: BA Hasil Penelitian (AE-1)",
+        status: "Tahap 1: Inventarisasi (AE-1)",
         current_step: 1,
         input_by: user.id,
       };
@@ -333,6 +397,7 @@ export default function InputAssetPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
+        {/* KARTU 1: DOKUMEN */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 border-l-4 border-l-pln-primary">
           <h2 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2 flex items-center gap-2">
             <FileText size={20} className="text-pln-primary" /> 1. Dokumen
@@ -377,27 +442,31 @@ export default function InputAssetPage() {
               <label className="text-xs font-bold text-gray-500 uppercase">
                 Kategori
               </label>
+              {/* Dropdown Kategori Manual */}
               <select
                 name="jenis_aset"
                 onChange={handleChange}
                 className="w-full p-3 bg-gray-50 border rounded-lg"
               >
-                {assetCategories.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
+                <option value="">-- Pilih Kategori --</option>
+                {Object.entries(ASSET_CATEGORY_MAP).map(([code, name]) => (
+                  <option key={code} value={name}>
+                    {name} ({code})
                   </option>
                 ))}
+                <option value="Lainnya">Lainnya (Isi Manual)</option>
               </select>
             </div>
             <div className="space-y-2">
               <label className="text-xs font-bold text-red-600 uppercase">
-                Kode Teknis (Opsional)
+                Nama Aset (Jika Lainnya)
               </label>
               <input
                 name="manual_jenis_aset"
                 type="text"
                 onChange={handleChange}
                 className="w-full p-3 bg-white border border-red-200 rounded-lg"
+                placeholder="Isi jika tidak ada di list"
               />
             </div>
             <div className="space-y-2 md:col-span-2">

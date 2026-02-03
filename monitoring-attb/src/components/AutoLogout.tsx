@@ -1,72 +1,88 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "../lib/supabaseClient";
+import { supabase } from "../lib/supabaseClient"; // Pastikan path ini benar
 import { toast } from "react-hot-toast";
 
-// ATUR BATAS WAKTU DISINI (Contoh: 15 Menit)
-// 15 menit * 60 detik * 1000 milidetik
-const TIMEOUT_MS = 15 * 60 * 1000;
+// --- MODE DEBUG ---
+// Ubah ini jadi 10 detik (10 * 1000) untuk pengetesan.
+// Nanti kembalikan ke 15 menit (15 * 60 * 1000) kalau sudah fix.
+const TIMEOUT_MS = 10 * 1000;
 
 export default function AutoLogout() {
   const router = useRouter();
-  const [lastActivity, setLastActivity] = useState(() => Date.now());
-
-  // Fungsi Logout
-  const handleLogout = useCallback(async () => {
-    try {
-      await supabase.auth.signOut();
-      toast.error("Sesi Anda telah berakhir karena tidak ada aktivitas.", {
-        icon: "⏳",
-        duration: 5000,
-        style: {
-          border: "1px solid #EF4444",
-          padding: "16px",
-          color: "#713200",
-        },
-      });
-      router.replace("/auth"); // Redirect ke halaman login
-    } catch (error) {
-      console.error("Error signing out:", error);
-    }
-  }, [router]);
-
-  // Removed unnecessary effect that sets lastActivity on mount
+  const lastActivityRef = useRef<number>(0);
 
   useEffect(() => {
-    // Fungsi untuk mereset timer saat ada aktivitas user
-    const resetTimer = () => {
-      setLastActivity(Date.now());
+    // Initialize lastActivityRef on mount
+    lastActivityRef.current = Date.now();
+
+    // Fungsi logout dipindah ke dalam effect agar tidak perlu dependency
+    const handleLogout = async () => {
+      const toastId = toast.loading("Sedang keluar...");
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+
+        localStorage.clear();
+        sessionStorage.clear();
+
+        toast.success("Berhasil keluar", { id: toastId });
+
+        router.refresh();
+        router.replace("/");
+      } catch (err) {
+        console.error("Logout Error:", err);
+        toast.error("Gagal logout, coba lagi", { id: toastId });
+      }
     };
 
-    // Event listener untuk mendeteksi aktivitas
-    window.addEventListener("mousemove", resetTimer);
-    window.addEventListener("keypress", resetTimer);
-    window.addEventListener("click", resetTimer);
-    window.addEventListener("scroll", resetTimer);
-    window.addEventListener("keydown", resetTimer);
+    // Fungsi reset timer (dipanggil saat ada gerakan)
+    const resetTimer = () => {
+      lastActivityRef.current = Date.now();
+    };
 
-    // Interval pengecekan setiap 10 detik
-    // Kita cek: Apakah (Waktu Sekarang - Aktivitas Terakhir) > Batas Waktu?
+    // Event listener yang lebih lengkap
+    const events = [
+      "mousedown",
+      "mousemove",
+      "wheel", // Tambahkan wheel untuk scroll mouse
+      "keydown",
+      "touchstart",
+      "scroll",
+      "click",
+    ];
+
+    // Pasang listener ke WINDOW dan DOCUMENT (untuk keamanan ganda)
+    events.forEach((event) => {
+      window.addEventListener(event, resetTimer);
+      document.addEventListener(event, resetTimer);
+    });
+
+    // Cek setiap 1 detik (agar tes 10 detik akurat)
     const intervalId = setInterval(() => {
       const now = Date.now();
-      if (now - lastActivity > TIMEOUT_MS) {
-        handleLogout();
-      }
-    }, 10000); // Cek tiap 10 detik
+      const timeSinceLastActivity = now - lastActivityRef.current;
 
-    // Bersihkan listener saat komponen di-unmount (pindah halaman/tutup tab)
+      console.log(`Idle: ${Math.floor(timeSinceLastActivity / 1000)} detik`); // LOG DEBUG
+
+      if (timeSinceLastActivity > TIMEOUT_MS) {
+        handleLogout();
+        // Hentikan interval agar tidak logout berulang kali
+        clearInterval(intervalId);
+      }
+    }, 1000);
+
+    // Bersihkan (Cleanup)
     return () => {
-      window.removeEventListener("mousemove", resetTimer);
-      window.removeEventListener("keypress", resetTimer);
-      window.removeEventListener("click", resetTimer);
-      window.removeEventListener("scroll", resetTimer);
-      window.removeEventListener("keydown", resetTimer);
+      events.forEach((event) => {
+        window.removeEventListener(event, resetTimer);
+        document.removeEventListener(event, resetTimer);
+      });
       clearInterval(intervalId);
     };
-  }, [lastActivity, handleLogout]);
+  }, [router]);
 
-  // Komponen ini tidak merender apa-apa secara visual (invisible)
   return null;
 }

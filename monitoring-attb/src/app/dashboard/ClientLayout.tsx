@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   FilePlus,
@@ -12,8 +12,7 @@ import {
   BookOpen,
   X,
 } from "lucide-react";
-// Tambahkan useCallback disini
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import { supabase } from "../../lib/supabaseClient";
 import { toast, Toaster } from "react-hot-toast";
@@ -27,14 +26,53 @@ export default function ClientLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // 1. Hook Dasar (useState, useRouter, etc)
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
-  const router = useRouter();
   const pathname = usePathname();
+  const lastActivityRef = useRef(Date.now());
 
-  // State untuk Auto Logout
-  const [lastActivity, setLastActivity] = useState(Date.now());
+  // 2. Callback Logout (Didefinisikan di awal agar bisa dipakai di useEffect bawah)
+  const handleAutoLogout = useCallback(async () => {
+    try {
+      toast.error("Sesi habis. Mengalihkan...", { duration: 3000 });
+      await supabase.auth.signOut();
+      // onAuthStateChange akan menangkap event signout ini
+    } catch (error) {
+      console.error("Auto logout error", error);
+      window.location.href = "/";
+    }
+  }, []);
 
+  const handleManualLogout = async () => {
+    const toastId = toast.loading("Keluar sistem...");
+    try {
+      await supabase.auth.signOut();
+      toast.success("Berhasil keluar", { id: toastId });
+    } catch (error) {
+      console.error("Manual logout error:", error);
+      toast.error("Gagal logout", { id: toastId });
+    }
+  };
+
+  // 3. Effect: Auth State Listener (Satpam Global)
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        localStorage.clear();
+        sessionStorage.clear();
+        window.location.href = "/"; // Hard Redirect
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // 4. Effect: Resize Listener (Responsif)
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 768) {
@@ -46,11 +84,14 @@ export default function ClientLayout({
       }
     };
 
+    // Jalankan sekali saat mount
     handleResize();
+
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // 5. Effect: Tutup Sidebar saat ganti halaman (Mobile Only)
   useEffect(() => {
     if (isMobile && isSidebarOpen) {
       setSidebarOpen(false);
@@ -58,91 +99,49 @@ export default function ClientLayout({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
+  // 6. Effect: Timer Auto Logout
   useEffect(() => {
-    const checkUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        const adminCheck =
-          user.email?.includes("admin") || user.user_metadata?.role === "admin";
-        console.log("Admin status:", adminCheck);
-      }
+    const resetTimer = () => {
+      lastActivityRef.current = Date.now();
     };
-    checkUser();
-  }, []);
 
-  // --- LOGIKA AUTO LOGOUT ---
-  const handleAutoLogout = useCallback(async () => {
-    await supabase.auth.signOut();
-    toast.error("Sesi habis karena tidak ada aktivitas.", {
-      icon: "⏳",
-      duration: 5000,
-      style: { border: "1px solid #EF4444", color: "#713200" },
-    });
-    router.replace("/"); // Kembali ke halaman login/landing
-  }, [router]);
+    const events = [
+      "mousedown",
+      "mousemove",
+      "keydown",
+      "scroll",
+      "touchstart",
+      "click",
+    ];
 
-  useEffect(() => {
-    // Fungsi reset timer saat ada gerakan
-    const resetTimer = () => setLastActivity(Date.now());
+    events.forEach((event) => window.addEventListener(event, resetTimer));
 
-    // Event listener aktivitas user
-    window.addEventListener("mousemove", resetTimer);
-    window.addEventListener("keypress", resetTimer);
-    window.addEventListener("click", resetTimer);
-    window.addEventListener("scroll", resetTimer);
+    // Reset timer sekali saat mount
+    resetTimer();
 
-    // Cek setiap 10 detik
     const intervalId = setInterval(() => {
       const now = Date.now();
-      if (now - lastActivity > TIMEOUT_MS) {
+      const timeSinceLastActivity = now - lastActivityRef.current;
+
+      if (timeSinceLastActivity > TIMEOUT_MS) {
         handleAutoLogout();
+        clearInterval(intervalId);
       }
-    }, 10000);
+    }, 10000); // Cek tiap 10 detik
 
     return () => {
-      // Bersihkan listener
-      window.removeEventListener("mousemove", resetTimer);
-      window.removeEventListener("keypress", resetTimer);
-      window.removeEventListener("click", resetTimer);
-      window.removeEventListener("scroll", resetTimer);
+      events.forEach((event) => window.removeEventListener(event, resetTimer));
       clearInterval(intervalId);
     };
-  }, [lastActivity, handleAutoLogout]);
-  // --------------------------
+  }, [handleAutoLogout]);
 
-  const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error("Gagal logout");
-    } else {
-      toast.success("Berhasil keluar");
-      router.push("/");
-    }
-  };
-
+  // --- RENDER UI ---
   return (
     <div className="flex min-h-screen bg-gray-50 relative">
-      {/* --- KOMPONEN TOASTER --- */}
-      <Toaster
-        position="top-center"
-        reverseOrder={false}
-        toastOptions={{
-          className: "",
-          style: {
-            border: "1px solid #E0E0E0",
-            padding: "16px",
-            color: "#333",
-            background: "#fff",
-            borderRadius: "12px",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-            zIndex: 99999,
-          },
-        }}
-      />
+      {/* Toaster Global */}
+      <Toaster position="top-center" />
 
-      {/* --- OVERLAY GELAP --- */}
+      {/* Overlay Gelap (Mobile) */}
       {isMobile && isSidebarOpen && (
         <div
           onClick={() => setSidebarOpen(false)}
@@ -150,7 +149,7 @@ export default function ClientLayout({
         />
       )}
 
-      {/* --- SIDEBAR --- */}
+      {/* Sidebar */}
       <aside
         className={`
           fixed md:sticky top-0 h-screen z-40 bg-pln-primary text-white shadow-xl transition-all duration-300 ease-in-out flex flex-col
@@ -161,34 +160,28 @@ export default function ClientLayout({
           }
         `}
       >
-        {/* HEADER SIDEBAR */}
+        {/* Header Sidebar */}
         <div className="h-20 flex items-center justify-between px-4 border-b border-white/10 bg-white shrink-0">
-          <div
-            className={`relative h-36 transition-all ${
-              isSidebarOpen ? "w-60" : "w-60"
-            }`}
-          >
+          <div className="relative w-full h-12 flex items-center justify-center">
             <Image
-              src="/logo_1.png"
+              src="/Logo.png"
               alt="Logo PLN"
-              width={150}
-              height={50}
+              fill
               priority
               className="object-contain"
             />
           </div>
-
           {isMobile && isSidebarOpen && (
             <button
               onClick={() => setSidebarOpen(false)}
-              className="text-gray-500 hover:text-red-500"
+              className="text-gray-500 hover:text-red-500 absolute right-0 mr-4"
             >
               <X size={24} />
             </button>
           )}
         </div>
 
-        {/* MENU ITEMS */}
+        {/* Menu Items */}
         <div className="flex-1 py-6 px-3 space-y-2 overflow-y-auto custom-scrollbar">
           <SidebarItem
             href="/dashboard"
@@ -218,12 +211,9 @@ export default function ClientLayout({
             isOpen={isSidebarOpen}
           />
 
-          {/* AREA KHUSUS ADMIN */}
           <div className="pt-4 pb-2 border-t border-white/10 mt-4">
             <p
-              className={`text-xs text-pln-accent/70 font-semibold px-4 mb-2 uppercase ${
-                !isSidebarOpen && "hidden"
-              }`}
+              className={`text-xs text-pln-accent/70 font-semibold px-4 mb-2 uppercase ${!isSidebarOpen && "hidden"}`}
             >
               Menu Input
             </p>
@@ -236,10 +226,10 @@ export default function ClientLayout({
           </div>
         </div>
 
-        {/* FOOTER */}
+        {/* Footer Sidebar */}
         <div className="p-4 border-t border-white/10 shrink-0">
           <button
-            onClick={handleLogout}
+            onClick={handleManualLogout}
             className="flex items-center gap-3 text-red-300 hover:text-white transition-colors w-full p-2 rounded-lg hover:bg-white/10"
           >
             <LogOut size={20} />
@@ -248,7 +238,7 @@ export default function ClientLayout({
         </div>
       </aside>
 
-      {/* --- MAIN CONTENT --- */}
+      {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white border-b-4 border-pln-gold flex items-center justify-between px-4 md:px-6 shadow-sm sticky top-0 z-20">
           <button
@@ -269,7 +259,15 @@ export default function ClientLayout({
               </Link>
             </div>
             <Link href="/dashboard/profile">
-              <div className="w-9 h-9 bg-gray-200 rounded-full border-2 border-pln-primary cursor-pointer hover:shadow-md transition-shadow"></div>
+              <div className="w-9 h-9 bg-gray-200 rounded-full border-2 border-pln-primary cursor-pointer hover:shadow-md flex items-center justify-center overflow-hidden">
+                <Image
+                  src="/Logo.png"
+                  alt="Profile"
+                  width={36}
+                  height={36}
+                  className="object-cover opacity-50"
+                />
+              </div>
             </Link>
           </div>
         </header>
@@ -301,27 +299,19 @@ function SidebarItem({
   isOpen: boolean;
 }) {
   const pathname = usePathname();
-  const isActive =
-    pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+  const isActive = pathname === href;
 
   return (
     <Link
       href={href}
       className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 group relative
-      ${
-        isActive
-          ? "bg-pln-accent text-white shadow-md font-semibold"
-          : "text-gray-300 hover:bg-white/10 hover:text-white"
-      }`}
+      ${isActive ? "bg-pln-accent text-white shadow-md font-semibold" : "text-gray-300 hover:bg-white/10 hover:text-white"}`}
     >
       <div
-        className={`${
-          isActive ? "text-white" : "text-pln-gold group-hover:text-white"
-        }`}
+        className={`${isActive ? "text-white" : "text-pln-gold group-hover:text-white"}`}
       >
         {icon}
       </div>
-
       {isOpen ? (
         <span>{label}</span>
       ) : (

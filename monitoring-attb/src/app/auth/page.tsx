@@ -1,23 +1,53 @@
 "use client";
 
-import { useState } from "react";
-import { supabase } from "../../lib/supabaseClient"; // Sesuaikan path jika perlu
+import { useState, useEffect } from "react";
+import { supabase } from "../../lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, User, ArrowLeft, Mail, AlertTriangle } from "lucide-react";
+// FIX 1: Tambahkan ArrowRight ke import
+import {
+  Lock,
+  User,
+  ArrowLeft,
+  ArrowRight,
+  Mail,
+  AlertTriangle,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
+// FIX 2: Gunakan path relatif agar aman
+import Loader from "../../components/Loader";
 
 export default function AuthPage() {
   const router = useRouter();
   const [isLogin, setIsLogin] = useState(true);
-  const [isLoading, setLoading] = useState(false);
+  const [isLoading, setLoading] = useState(true);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   // Form State
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  // 1. Check Session on Mount
+  useEffect(() => {
+    const checkSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) {
+        router.replace("/dashboard");
+      } else {
+        setLoading(false);
+      }
+    };
+    checkSession();
+  }, [router]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,35 +56,29 @@ export default function AuthPage() {
 
     try {
       if (isLogin) {
-        // --- 1. LOGIKA LOGIN ---
-        console.log("Mencoba login dengan:", email);
-
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: email,
-          password: password,
+        // --- LOGIN LOGIC ---
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
         });
 
         if (error) throw error;
 
-        console.log("Login sukses:", data);
-        toast.success("Login Berhasil! Mengalihkan...");
+        toast.success("Login Berhasil! Mengalihkan...", {
+          style: { border: "1px solid #01717f", color: "#01717f" },
+          iconTheme: { primary: "#01717f", secondary: "#FFFAEE" },
+        });
 
-        // --- PERBAIKAN DISINI ---
-        // 1. Refresh agar Server Component & Middleware sadar ada cookie baru
+        setIsRedirecting(true);
         router.refresh();
-
-        // 2. Beri jeda 500ms agar cookie benar-benar tertulis di browser
-        // sebelum kita memaksa pindah halaman.
         setTimeout(() => {
-          router.replace("/dashboard"); // Gunakan replace (agar tidak bisa di-back)
-        }, 500);
+          router.replace("/dashboard");
+        }, 800);
       } else {
-        // --- 2. LOGIKA DAFTAR ---
-        console.log("Mencoba daftar user:", email);
-
+        // --- SIGNUP LOGIC ---
         const { data, error } = await supabase.auth.signUp({
-          email: email,
-          password: password,
+          email,
+          password,
           options: {
             data: {
               full_name: fullName,
@@ -70,74 +94,112 @@ export default function AuthPage() {
           setErrorMsg(
             "Cek email Anda dan klik link verifikasi untuk bisa login.",
           );
+          setLoading(false);
         } else {
           toast.success("Pendaftaran Berhasil! Mengalihkan...");
+          setIsRedirecting(true);
           router.refresh();
           setTimeout(() => {
             router.replace("/dashboard");
-          }, 500);
+          }, 800);
         }
       }
+      // FIX 3: Hapus ': any' dan gunakan type casting 'as Error'
     } catch (error) {
       console.error("Auth Error:", error);
-      const err = error as Error;
-      // Menangani pesan error spesifik dari Supabase (opsional)
-      let pesan = err.message;
+      let pesan = (error as Error).message; // Type casting aman
+
       if (pesan === "Invalid login credentials")
         pesan = "Email atau password salah.";
 
       setErrorMsg(pesan);
-      toast.error(pesan);
-    } finally {
+      toast.error(pesan, {
+        style: { border: "1px solid #EF4444", color: "#B91C1C" },
+      });
       setLoading(false);
+      setIsRedirecting(false);
     }
-  }; // <--- END of handleAuth (Kurung kurawal ditutup di sini)
+  };
 
-  // --- RETURN COMPONENT UI (Harus di luar handleAuth) ---
+  // --- FULL SCREEN LOADER STATE ---
+  if (isLoading || isRedirecting) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10 bg-[url('/background.svg')] bg-cover bg-center" />
+        <div className="z-10 flex flex-col items-center gap-4 bg-white/80 backdrop-blur-md p-10 rounded-2xl shadow-xl border border-white/50">
+          <Loader />
+          <p className="text-[#01717f] text-sm font-semibold animate-pulse">
+            {isRedirecting
+              ? "Mengalihkan ke Dashboard..."
+              : "Memproses Data..."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // --- AUTH FORM UI ---
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pln-primary to-pln-accent p-4">
+    <div className="min-h-screen flex items-center justify-center bg-white relative overflow-hidden p-4">
+      {/* Background Style */}
+      <div className="absolute inset-0 bg-[#01717f] z-0">
+        <div className="absolute inset-0 opacity-15 bg-[url('/background.svg')] bg-cover bg-center mix-blend-overlay"></div>
+        <div className="absolute inset-0 bg-gradient-to-tr from-[#004a53] to-transparent opacity-90"></div>
+      </div>
+
       <Link
         href="/"
-        className="absolute top-8 left-8 text-white flex items-center gap-2 opacity-70 hover:opacity-100 transition-opacity z-10"
+        className="absolute top-8 left-8 text-white/80 hover:text-white flex items-center gap-2 transition-colors z-20 font-medium text-sm"
       >
-        <ArrowLeft size={20} /> Kembali ke Beranda
+        <ArrowLeft size={18} /> Kembali ke Beranda
       </Link>
 
       <motion.div
         layout
-        className="bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-4xl flex flex-col md:flex-row min-h-[500px]"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white rounded-3xl shadow-2xl overflow-hidden w-full max-w-4xl flex flex-col md:flex-row min-h-[550px] relative z-10"
       >
-        {/* Sisi Kiri: Visual */}
-        <div className="w-full md:w-5/12 bg-gray-50 p-8 flex flex-col justify-center items-center text-center border-r border-gray-100 relative overflow-hidden">
+        {/* Left Side: Visual/Branding */}
+        <div className="w-full md:w-5/12 bg-slate-50 p-8 flex flex-col justify-center items-center text-center border-r border-slate-100 relative overflow-hidden">
           <div className="relative z-10">
-            <div className="w-20 h-20 bg-pln-gold rounded-xl rotate-45 mb-6 shadow-lg shadow-pln-gold/40 flex items-center justify-center mx-auto">
-              <div className="w-10 h-10 bg-white -rotate-45" />
+            <div className="w-24 h-24 bg-white rounded-2xl mb-6 shadow-md flex items-center justify-center mx-auto p-4">
+              <Image
+                src="/Logo.png"
+                alt="Logo PLN"
+                width={60}
+                height={80}
+                className="object-contain"
+              />
             </div>
-            <h2 className="text-2xl font-bold text-pln-primary mb-2">
+            <h2 className="text-2xl font-black text-[#01717f] mb-2">
               Monitoring ATTB
             </h2>
-            <p className="text-gray-500 text-sm mb-6">
-              {isLogin ? "Masuk untuk mengelola aset." : "Daftar Staff Baru."}
+            <p className="text-slate-500 text-sm mb-6 px-4">
+              {isLogin
+                ? "Silakan masuk untuk mengakses dashboard aset."
+                : "Daftarkan akun staff baru untuk memulai."}
             </p>
           </div>
-          <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-pln-primary/10 rounded-full blur-2xl" />
-          <div className="absolute top-10 right-10 w-20 h-20 bg-pln-gold/20 rounded-full blur-xl" />
+          {/* Decorative Circles */}
+          <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-[#01717f]/5 rounded-full blur-3xl" />
+          <div className="absolute top-8 right-8 w-24 h-24 bg-[#e5b804]/10 rounded-full blur-2xl" />
         </div>
 
-        {/* Sisi Kanan: Form */}
+        {/* Right Side: Form */}
         <div className="w-full md:w-7/12 p-8 md:p-12 bg-white flex flex-col justify-center">
-          {/* SWITCH BUTTONS */}
-          <div className="flex bg-gray-100 p-1 rounded-xl mb-6 w-full max-w-xs mx-auto md:mx-0">
+          {/* Toggle Login/Signup */}
+          <div className="flex bg-slate-100 p-1 rounded-xl mb-8 w-full max-w-xs mx-auto md:mx-0">
             <button
               type="button"
               onClick={() => {
                 setIsLogin(true);
                 setErrorMsg("");
               }}
-              className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
+              className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all ${
                 isLogin
-                  ? "bg-white shadow text-pln-primary"
-                  : "text-gray-400 hover:text-gray-600"
+                  ? "bg-white shadow-sm text-[#01717f]"
+                  : "text-slate-400 hover:text-slate-600"
               }`}
             >
               Masuk
@@ -148,29 +210,34 @@ export default function AuthPage() {
                 setIsLogin(false);
                 setErrorMsg("");
               }}
-              className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
+              className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all ${
                 !isLogin
-                  ? "bg-white shadow text-pln-primary"
-                  : "text-gray-400 hover:text-gray-600"
+                  ? "bg-white shadow-sm text-[#01717f]"
+                  : "text-slate-400 hover:text-slate-600"
               }`}
             >
               Daftar Baru
             </button>
           </div>
 
-          <h3 className="text-2xl font-bold text-gray-800 mb-2">
-            {isLogin ? "Selamat Datang" : "Buat Akun Baru"}
+          <h3 className="text-2xl font-bold text-slate-800 mb-1">
+            {isLogin ? "Selamat Datang" : "Buat Akun Staff"}
           </h3>
+          <p className="text-slate-400 text-sm mb-6">
+            {isLogin
+              ? "Masukkan kredensial Anda untuk melanjutkan."
+              : "Lengkapi data diri Anda di bawah ini."}
+          </p>
 
-          {/* ERROR ALERT BOX */}
+          {/* Error Message */}
           {errorMsg && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-red-700 text-sm">
+            <div className="mb-6 p-3 bg-red-50 border border-red-100 rounded-lg flex items-start gap-3 text-red-600 text-sm">
               <AlertTriangle size={18} className="shrink-0 mt-0.5" />
               <p>{errorMsg}</p>
             </div>
           )}
 
-          <form onSubmit={handleAuth} className="space-y-4">
+          <form onSubmit={handleAuth} className="space-y-5">
             <AnimatePresence>
               {!isLogin && (
                 <motion.div
@@ -179,12 +246,12 @@ export default function AuthPage() {
                   exit={{ height: 0, opacity: 0 }}
                   className="overflow-hidden"
                 >
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5 ml-1">
                     Nama Lengkap
                   </label>
-                  <div className="relative mb-4">
+                  <div className="relative group">
                     <User
-                      className="absolute left-3 top-3 text-gray-400"
+                      className="absolute left-3 top-3 text-slate-400 group-focus-within:text-[#e5b804] transition-colors"
                       size={18}
                     />
                     <input
@@ -192,7 +259,7 @@ export default function AuthPage() {
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       placeholder="Nama Pegawai"
-                      className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pln-accent text-sm"
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e5b804] focus:border-transparent text-sm font-medium transition-all"
                       required={!isLogin}
                     />
                   </div>
@@ -201,12 +268,12 @@ export default function AuthPage() {
             </AnimatePresence>
 
             <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
-                Email
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5 ml-1">
+                Email Perusahaan
               </label>
-              <div className="relative">
+              <div className="relative group">
                 <Mail
-                  className="absolute left-3 top-3 text-gray-400"
+                  className="absolute left-3 top-3 text-slate-400 group-focus-within:text-[#e5b804] transition-colors"
                   size={18}
                 />
                 <input
@@ -214,44 +281,47 @@ export default function AuthPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="user@pln.co.id"
-                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pln-accent text-sm"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e5b804] focus:border-transparent text-sm font-medium transition-all"
                   required
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5 ml-1">
                 Password
               </label>
-              <div className="relative">
+              <div className="relative group">
                 <Lock
-                  className="absolute left-3 top-3 text-gray-400"
+                  className="absolute left-3 top-3 text-slate-400 group-focus-within:text-[#e5b804] transition-colors"
                   size={18}
                 />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pln-accent text-sm"
+                  className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#e5b804] focus:border-transparent text-sm font-medium transition-all"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-pln-primary hover:bg-pln-accent text-white font-bold py-3 rounded-lg shadow-lg flex justify-center items-center gap-2 mt-6 disabled:opacity-70 transition-all active:scale-95"
+              className="w-full bg-[#01717f] hover:bg-[#015f6b] text-white font-bold py-3.5 rounded-xl shadow-lg hover:shadow-xl transition-all flex justify-center items-center gap-2 mt-2 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {isLoading ? (
-                <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : isLogin ? (
-                "Masuk Sekarang"
-              ) : (
-                "Daftar Akun"
-              )}
+              {/* FIX 4: Menggunakan ArrowRight yang sudah di-import */}
+              {isLogin ? "Masuk Dashboard" : "Daftar Akun"}{" "}
+              <ArrowRight size={18} />
             </button>
           </form>
         </div>

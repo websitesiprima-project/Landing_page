@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+// Adjusted import path to be relative, consistent with other imports
+import Loader from "../../components/Loader";
 
 // DYNAMIC IMPORT CHART
 const DistributionChart = dynamic(
@@ -45,19 +47,17 @@ interface AssetData {
   created_at: string;
 }
 
-// --- FIX TYPE ERROR ---
-// Tambahkan [key: string]: ... agar cocok dengan interface di komponen Charts.tsx
 interface ChartData {
   name: string;
   count: number;
   totalValue: number;
-  [key: string]: string | number | undefined; // <--- INI PERBAIKANNYA
+  [key: string]: string | number | undefined;
 }
 
 interface PieData {
   name: string;
   value: number;
-  [key: string]: string | number | undefined; // <--- INI PERBAIKANNYA
+  [key: string]: string | number | undefined;
 }
 
 interface StatCardProps {
@@ -174,7 +174,6 @@ export default function DashboardPage() {
           "Selesai",
         ];
 
-        // Pastikan tipe data sesuai dengan ChartData
         const sortedChartData: ChartData[] = orderedLabels.map((label) => ({
           name: label,
           count: statusCounts[label]?.count || 0,
@@ -214,10 +213,11 @@ export default function DashboardPage() {
     return `Rp ${val.toLocaleString("id-ID")}`;
   };
 
+  // Moved the loading check inside the component function
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pln-primary"></div>
+      <div className="flex h-screen items-center justify-center bg-slate-50">
+        <Loader />
       </div>
     );
   }

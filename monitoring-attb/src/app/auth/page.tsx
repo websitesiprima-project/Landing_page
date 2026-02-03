@@ -22,7 +22,7 @@ export default function AuthPage() {
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setErrorMsg(""); // Reset error
+    setErrorMsg("");
 
     try {
       if (isLogin) {
@@ -39,8 +39,15 @@ export default function AuthPage() {
         console.log("Login sukses:", data);
         toast.success("Login Berhasil! Mengalihkan...");
 
+        // --- PERBAIKAN DISINI ---
+        // 1. Refresh agar Server Component & Middleware sadar ada cookie baru
         router.refresh();
-        router.push("/dashboard");
+
+        // 2. Beri jeda 500ms agar cookie benar-benar tertulis di browser
+        // sebelum kita memaksa pindah halaman.
+        setTimeout(() => {
+          router.replace("/dashboard"); // Gunakan replace (agar tidak bisa di-back)
+        }, 500);
       } else {
         // --- 2. LOGIKA DAFTAR ---
         console.log("Mencoba daftar user:", email);
@@ -51,7 +58,7 @@ export default function AuthPage() {
           options: {
             data: {
               full_name: fullName,
-              role: "staff", // Default role
+              role: "staff",
             },
           },
         });
@@ -64,14 +71,21 @@ export default function AuthPage() {
             "Cek email Anda dan klik link verifikasi untuk bisa login.",
           );
         } else {
-          toast.success("Pendaftaran Berhasil! Anda sudah login.");
-          router.push("/dashboard");
+          toast.success("Pendaftaran Berhasil! Mengalihkan...");
+          router.refresh();
+          setTimeout(() => {
+            router.replace("/dashboard");
+          }, 500);
         }
       }
     } catch (error) {
       console.error("Auth Error:", error);
       const err = error as Error;
-      const pesan = err.message || "Terjadi kesalahan sistem";
+      // Menangani pesan error spesifik dari Supabase (opsional)
+      let pesan = err.message;
+      if (pesan === "Invalid login credentials")
+        pesan = "Email atau password salah.";
+
       setErrorMsg(pesan);
       toast.error(pesan);
     } finally {

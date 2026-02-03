@@ -291,20 +291,24 @@ export default function DashboardPage() {
       {/* CHARTS AREA */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* BAR CHART */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100 min-h-[300px]">
+        {/* Tambahkan flex flex-col agar container lebih stabil */}
+        <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100 min-h-[300px] flex flex-col">
           <h3 className="font-bold text-gray-800 mb-6 flex items-center gap-2">
             <Wallet size={18} className="text-pln-primary" /> Distribusi Tahapan
-            & Nilai Buku
+            & End Accounting Value
           </h3>
-          <div className="h-64 w-full">
+          {/* UBAH h-64 JADI h-[300px] UNTUK FIX ERROR WIDTH(-1) */}
+          <div className="h-[300px] w-full">
             <DistributionChart data={chartData} />
           </div>
         </div>
 
         {/* PIE CHART */}
-        <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm border border-gray-100 min-h-[300px]">
+        {/* Tambahkan flex flex-col */}
+        <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm border border-gray-100 min-h-[300px] flex flex-col">
           <h3 className="font-bold text-gray-800 mb-4">Jenis Aset</h3>
-          <div className="h-64 w-full">
+          {/* UBAH h-64 JADI h-[300px] UNTUK FIX ERROR WIDTH(-1) */}
+          <div className="h-[300px] w-full">
             <CompositionChart data={pieData} />
           </div>
         </div>

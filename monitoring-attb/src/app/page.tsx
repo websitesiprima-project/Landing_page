@@ -38,7 +38,7 @@ export default function LandingPage() {
           <div className="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
             <div className="w-8 h-8 relative">
               <Image
-                src="/logo_1.png" // Pastikan nama file logo sesuai di folder public
+                src="/Logo.png" // Pastikan nama file logo sesuai di folder public
                 alt="Logo Kecil"
                 fill
                 className="object-contain"
@@ -72,7 +72,7 @@ export default function LandingPage() {
         >
           {/* LOGO BESAR DI TENGAH */}
           <Image
-            src="/logo_1.png"
+            src="/Logo.png"
             alt="Logo Besar"
             fill
             className="object-contain drop-shadow-2xl"

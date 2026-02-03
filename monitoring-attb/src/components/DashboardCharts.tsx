@@ -103,7 +103,7 @@ export function DistributionChart({ data }: ChartProps) {
           tickLine={false}
           tickFormatter={formatYAxisValue}
           label={{
-            value: "Nilai Buku",
+            value: "End Accounting Value (Rp)",
             angle: 90,
             position: "insideRight",
             fill: "#1E3A8A",
@@ -117,7 +117,10 @@ export function DistributionChart({ data }: ChartProps) {
             name: string | number | undefined,
           ) => {
             if (value === undefined) return "";
-            if (name === "Nilai Buku (Rp)" && typeof value === "number") {
+            if (
+              name === "End Accounting Value (Rp)" &&
+              typeof value === "number"
+            ) {
               return formatRupiah(value);
             }
             return `${value} Unit`;
@@ -145,7 +148,7 @@ export function DistributionChart({ data }: ChartProps) {
         <Bar
           yAxisId="right"
           dataKey="totalValue"
-          name="Nilai Buku (Rp)"
+          name="End Accounting Value (Rp)"
           fill="#1E3A8A"
           radius={[4, 4, 0, 0]}
           barSize={20}

@@ -164,7 +164,7 @@ export default function ClientLayout({
         <div className="h-20 flex items-center justify-between px-4 border-b border-white/10 bg-white shrink-0">
           <div className="relative w-full h-12 flex items-center justify-center">
             <Image
-              src="/Logo.png"
+              src="/Logo_1.png"
               alt="Logo PLN"
               fill
               priority

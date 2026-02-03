@@ -1,106 +1,178 @@
 "use client";
 
-import { ArrowRight, LayoutGrid, Database, Zap } from "lucide-react";
+import {
+  ArrowRight,
+  LayoutGrid,
+  ShieldCheck,
+  CheckCircle2,
+} from "lucide-react";
 import { motion } from "framer-motion";
+import Image from "next/image";
 
 export default function PortalGateway() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-white to-blue-50 flex flex-col items-center justify-center p-6 font-sans text-slate-800 relative overflow-hidden">
-      {/* Background Ornament (Blur) */}
-      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-cyan-200/20 rounded-full blur-3xl animate-pulse" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-200/20 rounded-full blur-3xl animate-pulse delay-1000" />
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 font-sans text-slate-800 relative overflow-hidden">
+      {/* --- BACKGROUND ELEMENTS --- */}
+      <div
+        className="absolute inset-0 z-0 opacity-[0.3]"
+        style={{
+          backgroundImage: "radial-gradient(#94a3b8 1px, transparent 1px)",
+          backgroundSize: "32px 32px",
+        }}
+      />
 
-      {/* --- HEADER --- */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-center mb-16 relative z-10"
-      >
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/80 backdrop-blur-sm rounded-full shadow-sm mb-6 border border-cyan-100">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-          <span className="text-xs font-bold tracking-wider text-cyan-700 uppercase">
-            System Operational
-          </span>
-        </div>
+      <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-[#01717f]/10 rounded-full blur-[120px] animate-pulse" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-[#e5b804]/10 rounded-full blur-[120px] animate-pulse delay-1000" />
 
-        <div className="flex items-center justify-center gap-3 mb-2">
-          <Zap className="text-yellow-500 fill-yellow-500" size={32} />
-          <h1 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tight">
-            PLN{" "}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-600 to-blue-600">
-              UPT MANADO
+      {/* --- MAIN CONTENT --- */}
+      <div className="relative z-10 w-full max-w-5xl flex flex-col items-center">
+        {/* --- HEADER --- */}
+        <motion.div
+          initial={{ opacity: 0, y: -30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="text-center mb-16"
+        >
+          {/* Badge Status */}
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/80 backdrop-blur-md rounded-full border border-slate-200 shadow-sm mb-6">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
             </span>
-          </h1>
+            <span className="text-[11px] font-bold tracking-widest text-slate-600 uppercase">
+              System Operational
+            </span>
+          </div>
+
+          {/* Logo & Judul */}
+          <div className="flex flex-col items-center justify-center gap-4 mb-4">
+            <div className="relative w-36 h-36 mb-2">
+              <Image
+                src="/Logo.png"
+                alt="Logo PLN"
+                fill
+                className="object-contain drop-shadow-lg"
+                priority
+              />
+            </div>
+
+            <h1 className="text-4xl md:text-6xl font-black text-slate-800 tracking-tight leading-none">
+              PORTAL <span className="text-[#01717f]">SIPRIMA</span>
+            </h1>
+          </div>
+
+          <div className="flex items-center justify-center gap-2 text-slate-500 font-medium text-sm md:text-base tracking-wide">
+            <span className="text-[#e5b804] font-bold">PT PLN (Persero)</span>
+            <span className="w-1 h-1 rounded-full bg-slate-300"></span>
+            <span>UPT MANADO</span>
+          </div>
+
+          <p className="mt-4 text-slate-400 text-sm max-w-xl mx-auto leading-relaxed">
+            Gateway Terintegrasi Sistem Informasi Pengelolaan & Inventarisasi
+            Aset.
+          </p>
+        </motion.div>
+
+        {/* --- KARTU APLIKASI --- */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full px-4 max-w-4xl">
+          {/* KARTU 1: REVALUE (TEAL) */}
+          <a
+            href="https://siprima-kepd.vercel.app/"
+            className="group w-full block"
+          >
+            <motion.div
+              whileHover={{ y: -8 }}
+              whileTap={{ scale: 0.98 }}
+              className="h-full bg-white/80 backdrop-blur-xl rounded-[2rem] p-8 border border-white shadow-[0_4px_20px_rgb(0,0,0,0.03)] hover:shadow-[0_20px_40px_rgb(1,113,127,0.15)] transition-all duration-300 relative overflow-hidden group hover:border-[#01717f]/30"
+            >
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#01717f] to-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+
+              <div className="relative z-10 flex flex-col h-full">
+                <div className="flex items-start justify-between mb-6">
+                  <div className="w-14 h-14 bg-[#01717f]/10 text-[#01717f] rounded-2xl flex items-center justify-center group-hover:bg-[#01717f] group-hover:text-white transition-all duration-300">
+                    <LayoutGrid size={28} />
+                  </div>
+                  <div className="px-3 py-1 bg-slate-100 text-slate-600 group-hover:bg-[#01717f]/10 group-hover:text-[#01717f] transition-colors text-[10px] font-bold uppercase tracking-wider rounded-full">
+                    Monitoring App
+                  </div>
+                </div>
+
+                <h2 className="text-2xl font-bold text-slate-800 mb-2 group-hover:text-[#01717f] transition-colors">
+                  ReValue
+                </h2>
+                <p className="text-slate-500 text-sm leading-relaxed mb-8 flex-grow">
+                  Aplikasi Monitoring Aset Tetap Tidak Beroperasi (ATTB),
+                  Visualisasi Data, dan Pelacakan Status Penghapusan.
+                </p>
+
+                <div className="flex items-center gap-2 text-sm font-bold text-slate-400 group-hover:text-[#01717f] transition-colors">
+                  Buka Aplikasi{" "}
+                  <ArrowRight
+                    size={16}
+                    className="group-hover:translate-x-1 transition-transform"
+                  />
+                </div>
+              </div>
+            </motion.div>
+          </a>
+
+          {/* KARTU 2: SIJAGAD (GOLD - WARRANTY) */}
+          <a
+            href="https://siprima-two.vercel.app/"
+            className="group w-full block"
+          >
+            <motion.div
+              whileHover={{ y: -8 }}
+              whileTap={{ scale: 0.98 }}
+              className="h-full bg-white/80 backdrop-blur-xl rounded-[2rem] p-8 border border-white shadow-[0_4px_20px_rgb(0,0,0,0.03)] hover:shadow-[0_20px_40px_rgb(229,184,4,0.15)] transition-all duration-300 relative overflow-hidden group hover:border-[#e5b804]/50"
+            >
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#e5b804] to-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+
+              <div className="relative z-10 flex flex-col h-full">
+                <div className="flex items-start justify-between mb-6">
+                  <div className="w-14 h-14 bg-[#e5b804]/10 text-[#b38f00] rounded-2xl flex items-center justify-center group-hover:bg-[#e5b804] group-hover:text-white transition-all duration-300">
+                    {/* IKON SUDAH BERUBAH JADI PERISAI (WARRANTY) */}
+                    <ShieldCheck size={28} />
+                  </div>
+                  <div className="px-3 py-1 bg-slate-100 text-slate-600 group-hover:bg-[#e5b804]/10 group-hover:text-[#b38f00] transition-colors text-[10px] font-bold uppercase tracking-wider rounded-full">
+                    Warranty App
+                  </div>
+                </div>
+
+                <h2 className="text-2xl font-bold text-slate-800 mb-2 group-hover:text-[#b38f00] transition-colors">
+                  SiJAGAD
+                </h2>
+                {/* DESKRIPSI SUDAH DIPERBARUI */}
+                <p className="text-slate-500 text-sm leading-relaxed mb-8 flex-grow">
+                  Aplikasi Manajemen Surat Penjaminan Pelaksanaan & Pemeliharaan
+                  (Garansi) serta Kontrol Masa Berlaku.
+                </p>
+
+                <div className="flex items-center gap-2 text-sm font-bold text-slate-400 group-hover:text-[#b38f00] transition-colors">
+                  Buka Aplikasi{" "}
+                  <ArrowRight
+                    size={16}
+                    className="group-hover:translate-x-1 transition-transform"
+                  />
+                </div>
+              </div>
+            </motion.div>
+          </a>
         </div>
-
-        <p className="text-slate-500 text-lg md:text-xl max-w-2xl mx-auto font-medium">
-          Integrated Asset Management & Monitoring System
-        </p>
-      </motion.div>
-
-      {/* --- KARTU PILIHAN APLIKASI --- */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl relative z-10">
-        {/* KARTU 1: REVALUE (Updated Link) */}
-        <a href="https://siprima-kepd.vercel.app/" className="group">
-          <motion.div
-            whileHover={{ y: -5 }}
-            className="h-full bg-white rounded-3xl p-8 border border-cyan-100 shadow-xl shadow-cyan-900/5 hover:shadow-cyan-500/20 transition-all relative overflow-hidden group-hover:border-cyan-300"
-          >
-            {/* Hiasan background kartu */}
-            <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-cyan-50 to-blue-50 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110" />
-
-            <div className="relative z-10">
-              <div className="w-16 h-16 bg-gradient-to-br from-cyan-500 to-blue-600 text-white rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-cyan-500/30 group-hover:rotate-3 transition-transform">
-                <LayoutGrid size={32} />
-              </div>
-
-              <h2 className="text-2xl font-bold text-slate-800 mb-2 group-hover:text-cyan-600 transition-colors">
-                ReValue
-              </h2>
-              <p className="text-slate-500 text-sm leading-relaxed mb-6">
-                Aplikasi utama untuk monitoring aset, visualisasi data
-                statistik, dan pelacakan status ATTB (User Interface).
-              </p>
-
-              <div className="flex items-center font-bold text-cyan-600 group-hover:gap-3 gap-1 transition-all text-sm">
-                Buka Aplikasi <ArrowRight size={18} />
-              </div>
-            </div>
-          </motion.div>
-        </a>
-
-        {/* KARTU 2: SIJAGAD (Updated Link) */}
-        <a href="https://siprima-two.vercel.app/" className="group">
-          <motion.div
-            whileHover={{ y: -5 }}
-            className="h-full bg-white rounded-3xl p-8 border border-orange-100 shadow-xl shadow-orange-900/5 hover:shadow-orange-500/20 transition-all relative overflow-hidden group-hover:border-orange-300"
-          >
-            {/* Hiasan background kartu */}
-            <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-orange-50 to-yellow-50 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110" />
-
-            <div className="relative z-10">
-              <div className="w-16 h-16 bg-gradient-to-br from-orange-400 to-yellow-500 text-white rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-orange-500/30 group-hover:-rotate-3 transition-transform">
-                <Database size={32} />
-              </div>
-
-              <h2 className="text-2xl font-bold text-slate-800 mb-2 group-hover:text-orange-500 transition-colors">
-                SiJAGAD
-              </h2>
-              <p className="text-slate-500 text-sm leading-relaxed mb-6">
-                Sistem Penanganan Surat Penjaminan Pelaksanaan & Surat
-                Penjaminan Pemeliharaan (Backend API).
-              </p>
-
-              <div className="flex items-center font-bold text-orange-500 group-hover:gap-3 gap-1 transition-all text-sm">
-                Akses SiJAGAD <ArrowRight size={18} />
-              </div>
-            </div>
-          </motion.div>
-        </a>
       </div>
 
-      <footer className="mt-16 text-slate-400 text-xs font-medium relative z-10">
-        &copy; {new Date().getFullYear()} PT PLN (Persero) UPT Manado.
+      {/* --- FOOTER --- */}
+      <footer className="mt-20 text-slate-400 text-[10px] md:text-xs font-medium relative z-10 flex flex-col items-center gap-3">
+        <div className="flex items-center gap-2 opacity-50">
+          <CheckCircle2 size={12} className="text-emerald-500" />
+          <span>Secure Connection Established</span>
+        </div>
+        <p>
+          &copy; {new Date().getFullYear()} PT PLN (Persero) UPT Manado. All
+          Rights Reserved.
+        </p>
+        {/* Penanda Versi */}
+        <p className="text-[9px] opacity-30 font-mono">Portal v2.1</p>
       </footer>
     </div>
   );

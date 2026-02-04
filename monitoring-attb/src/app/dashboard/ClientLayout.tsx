@@ -32,12 +32,33 @@ export default function ClientLayout({
   const pathname = usePathname();
   const lastActivityRef = useRef(Date.now());
 
-  // 2. Callback Logout (Didefinisikan di awal agar bisa dipakai di useEffect bawah)
+  // State untuk Avatar Header (Opsional: agar sinkron dengan profil)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  // --- FIX UTAMA: BERSIHKAN NOTIFIKASI SAAT MOUNT ---
+  useEffect(() => {
+    // Menghapus semua toast yang 'nyangkut' dari halaman Login
+    toast.dismiss();
+
+    // Opsional: Ambil foto profil untuk Header
+    const getAvatar = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user?.user_metadata?.avatar_url) {
+        setAvatarUrl(user.user_metadata.avatar_url);
+      }
+    };
+    getAvatar();
+  }, []);
+  // --------------------------------------------------
+
+  // 2. Callback Logout
   const handleAutoLogout = useCallback(async () => {
     try {
+      toast.dismiss(); // Bersihkan dulu sebelum pesan baru
       toast.error("Sesi habis. Mengalihkan...", { duration: 3000 });
       await supabase.auth.signOut();
-      // onAuthStateChange akan menangkap event signout ini
     } catch (error) {
       console.error("Auto logout error", error);
       window.location.href = "/";
@@ -45,6 +66,7 @@ export default function ClientLayout({
   }, []);
 
   const handleManualLogout = async () => {
+    toast.dismiss();
     const toastId = toast.loading("Keluar sistem...");
     try {
       await supabase.auth.signOut();
@@ -84,9 +106,7 @@ export default function ClientLayout({
       }
     };
 
-    // Jalankan sekali saat mount
     handleResize();
-
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
@@ -115,8 +135,6 @@ export default function ClientLayout({
     ];
 
     events.forEach((event) => window.addEventListener(event, resetTimer));
-
-    // Reset timer sekali saat mount
     resetTimer();
 
     const intervalId = setInterval(() => {
@@ -127,7 +145,7 @@ export default function ClientLayout({
         handleAutoLogout();
         clearInterval(intervalId);
       }
-    }, 10000); // Cek tiap 10 detik
+    }, 10000);
 
     return () => {
       events.forEach((event) => window.removeEventListener(event, resetTimer));
@@ -164,7 +182,7 @@ export default function ClientLayout({
         <div className="h-20 flex items-center justify-between px-4 border-b border-white/10 bg-white shrink-0">
           <div className="relative w-full h-12 flex items-center justify-center">
             <Image
-              src="/Logo_1.png"
+              src="/Logo.png"
               alt="Logo PLN"
               fill
               priority
@@ -258,15 +276,26 @@ export default function ClientLayout({
                 Lihat Profil
               </Link>
             </div>
+
+            {/* Foto Profil di Header (Sinkron dengan Profil) */}
             <Link href="/dashboard/profile">
-              <div className="w-9 h-9 bg-gray-200 rounded-full border-2 border-pln-primary cursor-pointer hover:shadow-md flex items-center justify-center overflow-hidden">
-                <Image
-                  src="/Logo.png"
-                  alt="Profile"
-                  width={36}
-                  height={36}
-                  className="object-cover opacity-50"
-                />
+              <div className="w-9 h-9 bg-gray-200 rounded-full border-2 border-pln-primary cursor-pointer hover:shadow-md flex items-center justify-center overflow-hidden relative">
+                {avatarUrl ? (
+                  <Image
+                    src={avatarUrl}
+                    alt="Profile"
+                    fill
+                    className="object-cover"
+                  />
+                ) : (
+                  <Image
+                    src="/Logo.png"
+                    alt="Profile Placeholder"
+                    width={36}
+                    height={36}
+                    className="object-cover opacity-50"
+                  />
+                )}
               </div>
             </Link>
           </div>

@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
-// FIX 1: Tambahkan ArrowRight ke import
 import {
   Lock,
   User,
@@ -18,7 +17,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
-// FIX 2: Gunakan path relatif agar aman
 import Loader from "../../components/Loader";
 
 export default function AuthPage() {
@@ -54,6 +52,9 @@ export default function AuthPage() {
     setLoading(true);
     setErrorMsg("");
 
+    // FIX 1: Hapus notifikasi lama agar bersih
+    toast.dismiss();
+
     try {
       if (isLogin) {
         // --- LOGIN LOGIC ---
@@ -65,13 +66,17 @@ export default function AuthPage() {
         if (error) throw error;
 
         toast.success("Login Berhasil! Mengalihkan...", {
+          duration: 2000, // Durasi pendek
           style: { border: "1px solid #01717f", color: "#01717f" },
           iconTheme: { primary: "#01717f", secondary: "#FFFAEE" },
         });
 
         setIsRedirecting(true);
         router.refresh();
+
         setTimeout(() => {
+          // FIX 2: Hapus notifikasi tepat sebelum pindah halaman
+          toast.dismiss();
           router.replace("/dashboard");
         }, 800);
       } else {
@@ -100,14 +105,14 @@ export default function AuthPage() {
           setIsRedirecting(true);
           router.refresh();
           setTimeout(() => {
+            toast.dismiss(); // FIX 2
             router.replace("/dashboard");
           }, 800);
         }
       }
-      // FIX 3: Hapus ': any' dan gunakan type casting 'as Error'
     } catch (error) {
       console.error("Auth Error:", error);
-      let pesan = (error as Error).message; // Type casting aman
+      let pesan = (error as Error).message;
 
       if (pesan === "Invalid login credentials")
         pesan = "Email atau password salah.";
@@ -319,7 +324,6 @@ export default function AuthPage() {
               disabled={isLoading}
               className="w-full bg-[#01717f] hover:bg-[#015f6b] text-white font-bold py-3.5 rounded-xl shadow-lg hover:shadow-xl transition-all flex justify-center items-center gap-2 mt-2 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {/* FIX 4: Menggunakan ArrowRight yang sudah di-import */}
               {isLogin ? "Masuk Dashboard" : "Daftar Akun"}{" "}
               <ArrowRight size={18} />
             </button>

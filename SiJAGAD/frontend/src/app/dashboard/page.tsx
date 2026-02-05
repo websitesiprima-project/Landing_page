@@ -25,6 +25,9 @@ import {
   BookOpen,
   FileText,
   Filter,
+  ArrowUp, // <--- 1. IMPORT BARU
+  ArrowDown, // <--- 1. IMPORT BARU
+  ArrowUpDown, // <--- 1. IMPORT BARU
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "react-hot-toast";
@@ -88,7 +91,7 @@ export default function Dashboard() {
   );
 
   const [userEmail, setUserEmail] = useState("");
-  const [isAdmin, setIsAdmin] = useState(false); // Default bukan admin
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [showLogs, setShowLogs] = useState(false);
@@ -99,6 +102,12 @@ export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("Semua");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+
+  // --- 2. STATE BARU UNTUK SORTING ---
+  const [sortConfig, setSortConfig] = useState<{
+    key: string;
+    direction: "asc" | "desc";
+  } | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
@@ -125,7 +134,6 @@ export default function Dashboard() {
         setLetters(cleanData);
       }
 
-      // Hanya Admin yang butuh fetch logs
       if (isAdmin) {
         const resLogs = await fetch(`${API_URL}/logs`);
         if (resLogs.ok) setLogs(await resLogs.json());
@@ -193,14 +201,13 @@ export default function Dashboard() {
         }
         setUserEmail(user.email || "Unknown");
 
-        // Cek Role di Supabase
         const { data } = await supabase
           .from("profiles")
           .select("role")
           .eq("id", user.id)
           .single();
         const userRole = data?.role === "admin";
-        setIsAdmin(userRole); // Set State Admin
+        setIsAdmin(userRole);
 
         await fetchData();
         setIsPageLoading(false);
@@ -228,6 +235,44 @@ export default function Dashboard() {
 
     return categoryMatch && statusMatch && searchMatch;
   });
+
+  // --- 3. LOGIKA SORTING BARU ---
+  // Kita urutkan data hasil filter (filteredLetters)
+  const sortedLetters = useMemo(() => {
+    const sortableItems = [...filteredLetters];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        // Ambil nilai string untuk dibandingkan (lowercase agar tidak case sensitive)
+        const valA = a.vendor.toLowerCase();
+        const valB = b.vendor.toLowerCase();
+
+        if (valA < valB) {
+          return sortConfig.direction === "asc" ? -1 : 1;
+        }
+        if (valA > valB) {
+          return sortConfig.direction === "asc" ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [filteredLetters, sortConfig]);
+
+  // --- 4. FUNGSI HANDLER SORT ---
+  const handleSort = (key: string) => {
+    let direction: "asc" | "desc" | null = "asc";
+    if (sortConfig?.key === key && sortConfig.direction === "asc") {
+      direction = "desc";
+    } else if (sortConfig?.key === key && sortConfig.direction === "desc") {
+      direction = null; // Reset ke default (tanpa sort)
+    }
+
+    if (direction) {
+      setSortConfig({ key, direction });
+    } else {
+      setSortConfig(null);
+    }
+  };
 
   // --- ACTIONS ---
   const toggleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -368,6 +413,7 @@ export default function Dashboard() {
                 onClick={() => {
                   setActiveTab(tab);
                   setSelectedIds([]);
+                  setSortConfig(null); // Reset sort saat ganti tab
                 }}
                 className={`px-6 py-3 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === tab ? "bg-slate-900 text-white shadow-md" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
               >
@@ -417,7 +463,6 @@ export default function Dashboard() {
               <span className="hidden xl:inline font-bold text-xs">EXCEL</span>
             </button>
 
-            {/* 🔥 HANYA ADMIN BISA LIHAT TOMBOL LOG */}
             {isAdmin && (
               <button
                 onClick={() => setShowLogs(true)}
@@ -436,7 +481,6 @@ export default function Dashboard() {
             <table className="w-full text-left relative">
               <thead className="sticky top-0 z-20 bg-slate-50 border-b border-slate-100 shadow-sm">
                 <tr className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
-                  {/* 🔥 HANYA ADMIN BISA LIHAT CHECKBOX */}
                   {isAdmin && (
                     <th className="px-6 py-5 w-14 text-center">
                       <input
@@ -450,7 +494,30 @@ export default function Dashboard() {
                       />
                     </th>
                   )}
-                  <th className="px-6 py-5">Vendor & Kontrak</th>
+                  {/* --- 5. HEADER VENDOR BISA DIKLIK (SORT) --- */}
+                  <th
+                    className="px-6 py-5 cursor-pointer hover:bg-slate-100 transition-colors group select-none"
+                    onClick={() => handleSort("vendor")}
+                  >
+                    <div className="flex items-center gap-2">
+                      Vendor & Kontrak
+                      <span className="text-slate-400 group-hover:text-blue-600">
+                        {sortConfig?.key === "vendor" ? (
+                          sortConfig.direction === "asc" ? (
+                            <ArrowUp size={14} />
+                          ) : (
+                            <ArrowDown size={14} />
+                          )
+                        ) : (
+                          <ArrowUpDown
+                            size={14}
+                            className="opacity-0 group-hover:opacity-100"
+                          />
+                        )}
+                      </span>
+                    </div>
+                  </th>
+                  {/* ------------------------------------------- */}
                   <th className="px-6 py-5">Nominal Jaminan</th>
                   <th className="px-6 py-5">Lokasi Fisik</th>
                   <th className="px-6 py-5">Status & Masa Berlaku</th>
@@ -459,8 +526,9 @@ export default function Dashboard() {
               </thead>
 
               <tbody className="divide-y divide-slate-100">
-                {filteredLetters.length > 0 ? (
-                  filteredLetters.map((letter) => {
+                {/* --- 6. MENGGUNAKAN sortedLetters SEBAGAI DATA --- */}
+                {sortedLetters.length > 0 ? (
+                  sortedLetters.map((letter) => {
                     const endDate = new Date(letter.tanggal_akhir_garansi);
                     const isValidDate = !isNaN(endDate.getTime());
                     const diff = isValidDate
@@ -500,7 +568,6 @@ export default function Dashboard() {
                         key={letter.id}
                         className={`group transition-colors ${isSelected ? "bg-blue-50/60" : "hover:bg-slate-50/80"}`}
                       >
-                        {/* 🔥 HANYA ADMIN BISA LIHAT CHECKBOX */}
                         {isAdmin && (
                           <td className="px-6 py-4 text-center">
                             <input
@@ -568,10 +635,8 @@ export default function Dashboard() {
                           </div>
                         </td>
 
-                        {/* 🔥 TOMBOL AKSI DISESUAIKAN ROLE */}
                         <td className="px-6 py-4">
                           <div className="flex justify-center gap-2 opacity-100">
-                            {/* Admin Only: Edit */}
                             {isAdmin && (
                               <Link
                                 href={`/dashboard/input?id=${letter.id}`}
@@ -582,7 +647,6 @@ export default function Dashboard() {
                               </Link>
                             )}
 
-                            {/* Admin Only: Delete */}
                             {isAdmin && (
                               <button
                                 onClick={() => handleDelete(letter.id)}
@@ -637,7 +701,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* 🔥 HANYA ADMIN BISA LIHAT BULK DELETE & TOMBOL TAMBAH */}
         {isAdmin && (
           <AnimatePresence>
             {selectedIds.length > 0 && (
@@ -680,7 +743,6 @@ export default function Dashboard() {
           </AnimatePresence>
         )}
 
-        {/* Floating Action Button (Admin Only) */}
         {isAdmin && (
           <Link href="/dashboard/input">
             <button
@@ -696,7 +758,6 @@ export default function Dashboard() {
         )}
       </main>
 
-      {/* MODAL QR CODE (SEMUA BISA LIHAT) */}
       <AnimatePresence>
         {showQR && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 print:bg-white print:p-0">
@@ -766,7 +827,6 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
-      {/* MODAL LOGS (HANYA ADMIN) */}
       <AnimatePresence>
         {showLogs && isAdmin && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">

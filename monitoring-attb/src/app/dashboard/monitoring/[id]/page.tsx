@@ -23,36 +23,40 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { toast } from "react-hot-toast";
 
-// --- INTERFACES ---
-interface jsPDFWithAutoTable extends jsPDF {
-  lastAutoTable: { finalY: number };
-}
+// --- CONSTANTS ---
+const ASSET_CATEGORIES = [
+  { id: "10100", label: "Tanah & hak atas tanah" },
+  { id: "10200", label: "Bangunan & kelengkap" },
+  { id: "10300", label: "Bangunan saluran air" },
+  { id: "10400", label: "Jalan dan sepur samp" },
+  { id: "10500", label: "Instalasi dan mesin" },
+  { id: "10510", label: "Ins & Mesin Cina" },
+  { id: "10520", label: "Ins & Mesin Non-Cina" },
+  { id: "10600", label: "Plngk penyaluran TL" },
+  { id: "10700", label: "Gardu Induk" },
+  { id: "10800", label: "SUTT" },
+  { id: "10900", label: "Kabel di bawah tanah" },
+  { id: "11000", label: "Jaringan distribusi" },
+  { id: "11010", label: "Penghantar jaringan" },
+  { id: "11020", label: "Peralatan jaringan" },
+  { id: "11030", label: "Tiang" },
+  { id: "11100", label: "Gardu distribusi" },
+  { id: "11110", label: "Gardu distribusi" },
+  { id: "11120", label: "Fasilitas 20 KV-GI" },
+  { id: "11130", label: "Trafo" },
+  { id: "11200", label: "Plngk lain2 distribu" },
+  { id: "11300", label: "Plngk pgolah data" },
+  { id: "11400", label: "Plngk transmisi data" },
+  { id: "11450", label: "Teleinformasi Data" },
+  { id: "11500", label: "Perlengkapan khusus" },
+  { id: "11600", label: "Perlengkapan telekom" },
+  { id: "11700", label: "Perlengkapan umum" },
+  { id: "11750", label: "Peralatan Kerja" },
+  { id: "11800", label: "Kendaraan bermotor &" },
+  { id: "11900", label: "Kapal & Prlngkapanya" },
+  { id: "40700", label: "Gardu Induk" },
+];
 
-interface AssetDetail {
-  id: string;
-  no_aset: string;
-  jenis_aset: string;
-  merk_type: string;
-  lokasi: string;
-  spesifikasi: string;
-  konversi_kg: number;
-  rupiah_per_kg: number;
-  nilai_buku: number;
-  harga_tafsiran: number;
-  current_step: number;
-  status: string;
-  foto_url: string | null;
-  created_at: string;
-  keterangan: string;
-  no_surat_ae1: string;
-  no_surat_ae2: string;
-  no_attb: string;
-  no_surat_ae3: string;
-  no_surat_ae4: string;
-  no_surat_sk: string;
-}
-
-// ALUR 8 TAHAP (SINKRON DENGAN MONITORING)
 const TIMELINE_STEPS = [
   {
     step: 1,
@@ -84,6 +88,37 @@ const TIMELINE_STEPS = [
   },
 ];
 
+// --- INTERFACES (FIXED) ---
+// Definisi sederhana untuk menampung plugin autoTable
+interface AutoTableDoc {
+  lastAutoTable?: { finalY: number };
+}
+
+interface AssetDetail {
+  id: string;
+  no_aset: string;
+  jenis_aset: string;
+  merk_type: string;
+  lokasi: string;
+  spesifikasi: string;
+  konversi_kg: number;
+  rupiah_per_kg: number;
+  nilai_buku: number;
+  harga_tafsiran: number;
+  current_step: number;
+  status: string;
+  foto_url: string | null;
+  created_at: string;
+  keterangan: string;
+  no_surat_ae1: string;
+  no_surat_ae2: string;
+  no_attb: string;
+  no_surat_ae3: string;
+  no_surat_ae4: string;
+  no_surat_ae4_date?: string;
+  no_surat_sk: string;
+}
+
 export default function AssetDetailPage({
   params,
 }: {
@@ -96,6 +131,9 @@ export default function AssetDetailPage({
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
+  // STATE ROLE ADMIN
+  const [isAdmin, setIsAdmin] = useState(false);
+
   // STATE MODAL
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -105,7 +143,13 @@ export default function AssetDetailPage({
   const [updateForm, setUpdateForm] = useState({ nextStep: 2, noSurat: "" });
   const [editForm, setEditForm] = useState<Partial<AssetDetail>>({});
 
-  // FIX 2: Bungkus fungsi dengan useCallback
+  const getCategoryLabel = useCallback((code: string | undefined) => {
+    if (!code) return "-";
+    const cleanCode = String(code).trim();
+    const category = ASSET_CATEGORIES.find((cat) => cat.id === cleanCode);
+    return category ? category.label : cleanCode;
+  }, []);
+
   const fetchAssetDetail = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -118,15 +162,27 @@ export default function AssetDetailPage({
       toast.error("Gagal memuat detail aset");
     } else {
       setAsset(data);
-      // Auto-set step selanjutnya
       setUpdateForm({ nextStep: (data.current_step || 0) + 1, noSurat: "" });
       setEditForm(data);
     }
     setLoading(false);
   }, [id]);
 
-  // FIX 2: Masukkan fetchAssetDetail ke dependency array
   useEffect(() => {
+    // 1. Cek Role User
+    const checkUserRole = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const checkAdmin =
+          user.email?.includes("admin") || user.user_metadata?.role === "admin";
+        setIsAdmin(checkAdmin || false);
+      }
+    };
+    checkUserRole();
+
+    // 2. Fetch Data
     if (id) fetchAssetDetail();
   }, [id, fetchAssetDetail]);
 
@@ -137,10 +193,8 @@ export default function AssetDetailPage({
       minimumFractionDigits: 0,
     }).format(val);
 
-  // --- HANDLER UPDATE PROGRES (MAJU KE DEPAN) ---
   const handleUpdateProgress = async () => {
     if (!asset) return;
-
     if (!updateForm.noSurat)
       return toast.error("Nomor Surat/Dokumen Wajib Diisi!");
 
@@ -157,7 +211,6 @@ export default function AssetDetailPage({
       else if (nextStepIndex === 4) suratField = "no_surat_ae4";
       else if (nextStepIndex === 8) suratField = "no_surat_sk";
 
-      // FIX 1: Hapus 'any' dengan memberikan tipe Record
       const updatePayload: Record<string, string | number> = {
         current_step: nextStepIndex,
         status: statusLabel,
@@ -184,7 +237,6 @@ export default function AssetDetailPage({
     }
   };
 
-  // --- HANDLER EDIT DATA ---
   const handleEditData = async () => {
     if (!asset) return;
     setProcessing(true);
@@ -215,7 +267,7 @@ export default function AssetDetailPage({
     }
   };
 
-  // --- HANDLER DOWNLOAD PDF ---
+  // --- HANDLER DOWNLOAD PDF (FIXED TYPE) ---
   const handleDownloadPDF = () => {
     if (!asset) return;
     setDownloading(true);
@@ -230,7 +282,7 @@ export default function AssetDetailPage({
       head: [["Informasi", "Detail"]],
       body: [
         ["No. Aset (SAP)", asset.no_aset],
-        ["Jenis Aset", asset.jenis_aset],
+        ["Jenis Aset", getCategoryLabel(asset.jenis_aset)],
         ["Merk / Type", asset.merk_type],
         ["Lokasi", asset.lokasi],
         [
@@ -244,8 +296,11 @@ export default function AssetDetailPage({
       headStyles: { fillColor: [0, 162, 233] },
     });
 
+    // FIX: Gunakan interface 'AutoTableDoc' agar aman dari TS dan ESLint
+    const finalY = (doc as unknown as AutoTableDoc).lastAutoTable?.finalY || 40;
+
     autoTable(doc, {
-      startY: (doc as jsPDFWithAutoTable).lastAutoTable.finalY + 10,
+      startY: finalY + 10,
       head: [["Parameter Teknis & Keuangan", "Nilai"]],
       body: [
         ["Spesifikasi", asset.spesifikasi],
@@ -259,8 +314,12 @@ export default function AssetDetailPage({
       headStyles: { fillColor: [249, 168, 37] },
     });
 
+    // FIX: Gunakan interface 'AutoTableDoc' lagi
+    const finalY2 =
+      (doc as unknown as AutoTableDoc).lastAutoTable?.finalY || 40;
+
     autoTable(doc, {
-      startY: (doc as jsPDFWithAutoTable).lastAutoTable.finalY + 10,
+      startY: finalY2 + 10,
       head: [["Tahapan", "Nomor Surat"]],
       body: [
         ["AE-1 (Inventarisasi)", asset.no_surat_ae1 || "-"],
@@ -276,7 +335,6 @@ export default function AssetDetailPage({
     setDownloading(false);
   };
 
-  // --- HANDLER HAPUS DATA ---
   const handleDelete = async () => {
     if (!asset) return;
     if (!confirm("Yakin ingin menghapus aset ini secara permanen?")) return;
@@ -291,9 +349,10 @@ export default function AssetDetailPage({
       toast.success("Aset berhasil dihapus");
       router.push("/dashboard/monitoring");
     } catch (err) {
-      // FIX 3: Gunakan variabel err
       console.error(err);
-      toast.error("Gagal menghapus aset");
+      // FIX: Cast 'err' sebagai 'Error'
+      const message = (err as Error).message || "Gagal menghapus aset";
+      toast.error(message);
       setProcessing(false);
     }
   };
@@ -321,7 +380,6 @@ export default function AssetDetailPage({
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 relative">
-      {/* HEADER */}
       <div className="bg-white border-b sticky top-0 z-20 px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
           <button
@@ -332,7 +390,7 @@ export default function AssetDetailPage({
           </button>
           <div>
             <h1 className="text-xl font-bold text-gray-800">
-              {asset.jenis_aset}
+              {getCategoryLabel(asset.jenis_aset)}
             </h1>
             <div className="flex items-center gap-2 text-sm text-gray-500 font-mono">
               <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100">
@@ -346,34 +404,35 @@ export default function AssetDetailPage({
           </div>
         </div>
 
-        {/* ACTION BUTTONS */}
-        <div className="flex gap-2">
-          <button
-            onClick={handleDelete}
-            className="p-2 text-red-500 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
-            title="Hapus Aset Ini"
-          >
-            <Trash2 size={20} />
-          </button>
-          <button
-            onClick={() => setShowEditModal(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 shadow-sm transition-all"
-          >
-            <Edit size={16} /> Edit Data
-          </button>
-          {asset.current_step < 8 && (
+        {/* --- SECURITY CHECK: HANYA TAMPIL JIKA ADMIN --- */}
+        {isAdmin && (
+          <div className="flex gap-2">
             <button
-              onClick={() => setShowUpdateModal(true)}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-pln-primary rounded-lg hover:bg-blue-700 shadow-md transition-all active:scale-95"
+              onClick={handleDelete}
+              className="p-2 text-red-500 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+              title="Hapus Aset Ini"
             >
-              <CheckCircle size={16} /> Update Progres
+              <Trash2 size={20} />
             </button>
-          )}
-        </div>
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 shadow-sm transition-all"
+            >
+              <Edit size={16} /> Edit Data
+            </button>
+            {asset.current_step < 8 && (
+              <button
+                onClick={() => setShowUpdateModal(true)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-pln-primary rounded-lg hover:bg-blue-700 shadow-md transition-all active:scale-95"
+              >
+                <CheckCircle size={16} /> Update Progres
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* KOLOM KIRI: INFO ASET */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden relative group">
             <div className="relative w-full h-[400px] bg-gray-100 flex items-center justify-center">
@@ -400,6 +459,14 @@ export default function AssetDetailPage({
               Nilai
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <p className="text-xs text-gray-400 uppercase font-bold">
+                  Kategori Aset (AT Class)
+                </p>
+                <p className="text-lg font-bold text-pln-primary">
+                  {getCategoryLabel(asset.jenis_aset)}
+                </p>
+              </div>
               <div>
                 <p className="text-xs text-gray-400 uppercase font-bold">
                   Merk / Type
@@ -451,7 +518,6 @@ export default function AssetDetailPage({
           </div>
         </div>
 
-        {/* KOLOM KANAN: TRACKING */}
         <div className="space-y-6">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
@@ -461,7 +527,6 @@ export default function AssetDetailPage({
               {TIMELINE_STEPS.map((item) => {
                 const isCompleted = asset.current_step > item.step;
                 const isActive = asset.current_step === item.step;
-
                 let surat = "";
                 if (item.step === 1) surat = asset.no_surat_ae1;
                 else if (item.step === 2) surat = asset.no_surat_ae2;
@@ -520,8 +585,7 @@ export default function AssetDetailPage({
         </div>
       </div>
 
-      {/* MODAL UPDATE PROGRESS */}
-      {showUpdateModal && (
+      {showUpdateModal && isAdmin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 relative">
             <button
@@ -592,8 +656,7 @@ export default function AssetDetailPage({
         </div>
       )}
 
-      {/* MODAL EDIT DATA */}
-      {showEditModal && (
+      {showEditModal && isAdmin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 relative max-h-[90vh] overflow-y-auto">
             <button
@@ -608,16 +671,22 @@ export default function AssetDetailPage({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-gray-500">
-                  Jenis Aset
+                  Jenis Aset (Kategori)
                 </label>
-                <input
-                  type="text"
-                  className="w-full p-2 border rounded"
+                <select
+                  className="w-full p-2 border rounded bg-white"
                   value={editForm.jenis_aset || ""}
                   onChange={(e) =>
                     setEditForm({ ...editForm, jenis_aset: e.target.value })
                   }
-                />
+                >
+                  <option value="">Pilih Kategori</option>
+                  {ASSET_CATEGORIES.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.id} - {cat.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-bold text-gray-500">

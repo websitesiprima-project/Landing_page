@@ -35,11 +35,14 @@ interface Asset {
   no_attb: string;
   keterangan: string;
   created_at: string;
+  persetujuan_dekom?: string;
+  lelang?: string;
+  pengangkutan?: string;
+  selesai?: string;
   [key: string]: string | number | null | undefined;
 }
 
-// 1. DAFTAR LENGKAP KATEGORI ASET (REFERENSI)
-// Meskipun tabel menampilkan angka, map ini berguna untuk referensi sistem.
+// REFERENSI KATEGORI (MAP: KODE -> LABEL)
 const ASSET_CATEGORY_MAP: Record<string, string> = {
   "10100": "Tanah & hak atas tanah",
   "10200": "Bangunan & kelengkap",
@@ -70,10 +73,9 @@ const ASSET_CATEGORY_MAP: Record<string, string> = {
   "11750": "Peralatan Kerja",
   "11800": "Kendaraan bermotor &",
   "11900": "Kapal & Prlngkapanya",
-  "40700": "Gardu Induk", // Tambahan khusus
+  "40700": "Gardu Induk",
 };
 
-// Helper untuk status text
 const getStatusLabel = (step: number) => {
   if (step === 8) return "Selesai";
   if (step === 5) return "Persetujuan Dekom";
@@ -86,18 +88,14 @@ export default function MonitoringTablePage() {
   const [data, setData] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // STATE UNTUK SORTING
+  // Sorting & Filtering State
   const [sortConfig, setSortConfig] = useState<{
     key: keyof Asset;
     direction: "asc" | "desc";
   } | null>(null);
-
-  // STATE UNTUK FILTERING (Excel Style)
   const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>(
     {},
   );
-
-  // State untuk Dropdown active
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
 
   // FETCH DATA
@@ -111,13 +109,17 @@ export default function MonitoringTablePage() {
 
       if (error) throw error;
 
-      // MAPPING DATA
-      const mappedData: Asset[] = (assets || []).map((item: Asset) => ({
-        ...item,
-        // TAMPILKAN ANGKA SAJA (Sesuai Request)
-        jenis_aset: String(item.jenis_aset || "").trim(),
-        status_text: getStatusLabel(item.current_step),
-      }));
+      // --- MAPPING DATA (FIX: TERJEMAHKAN KODE KE LABEL) ---
+      const mappedData: Asset[] = (assets || []).map((item: Asset) => {
+        const cleanJenis = String(item.jenis_aset || "").trim(); // Hapus spasi
+
+        return {
+          ...item,
+          // Jika kode ada di MAP, pakai Label-nya. Jika tidak, pakai kodenya.
+          jenis_aset: ASSET_CATEGORY_MAP[cleanJenis] || cleanJenis,
+          status_text: getStatusLabel(item.current_step),
+        };
+      });
 
       setData(mappedData);
     } catch (error) {
@@ -132,11 +134,11 @@ export default function MonitoringTablePage() {
     fetchData();
   }, []);
 
-  // --- LOGIKA FILTERING & SORTING ---
+  // LOGIKA PROCESS DATA
   const processData = () => {
     let result = [...data];
 
-    // 1. Filter
+    // Filter
     Object.keys(columnFilters).forEach((key) => {
       const selectedValues = columnFilters[key];
       if (selectedValues && selectedValues.length > 0) {
@@ -151,24 +153,20 @@ export default function MonitoringTablePage() {
       }
     });
 
-    // 2. Sort
+    // Sort
     if (sortConfig) {
       const { key, direction } = sortConfig;
       result.sort((a, b) => {
         let valA = a[key];
         let valB = b[key];
-
         if (key === "status") {
           valA = a.current_step;
           valB = b.current_step;
         }
-
         if (typeof valA === "string") valA = valA.toLowerCase();
         if (typeof valB === "string") valB = valB.toLowerCase();
-
         const safeValA = valA ?? "";
         const safeValB = valB ?? "";
-
         if (safeValA < safeValB) return direction === "asc" ? -1 : 1;
         if (safeValA > safeValB) return direction === "asc" ? 1 : -1;
         return 0;
@@ -180,7 +178,13 @@ export default function MonitoringTablePage() {
 
   const finalData = processData();
 
-  // --- HANDLER ---
+  // Hitung Total
+  const totalEndAcqValue = finalData.reduce(
+    (sum, item) => sum + (Number(item.nilai_buku) || 0),
+    0,
+  );
+
+  // Handlers
   const handleSort = (key: keyof Asset, direction: "asc" | "desc") => {
     setSortConfig({ key, direction });
   };
@@ -209,7 +213,25 @@ export default function MonitoringTablePage() {
     setColumnFilters(newFilters);
   };
 
-  // --- COMPONENT HEADER EXCEL-STYLE ---
+  const formatRupiah = (num: number) => {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+    }).format(num);
+  };
+
+  const handleDownloadExcel = () => {
+    const worksheet = XLSX.utils.json_to_sheet(finalData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Data_Aset");
+    XLSX.writeFile(
+      workbook,
+      `Monitoring_Aset_${new Date().toISOString()}.xlsx`,
+    );
+  };
+
+  // --- COMPONENT HEADER (FIXED INTERACTIVITY) ---
   const ColumnHeader = ({
     label,
     field,
@@ -236,8 +258,7 @@ export default function MonitoringTablePage() {
 
     const stateKey = isStatus ? "current_step" : (field as string);
     const activeFilter = columnFilters[stateKey];
-    const isAllSelected = activeFilter === undefined;
-
+    const isAllSelected = activeFilter === undefined; // Undefined = Select All
     const isOpen = activeDropdown === field;
 
     return (
@@ -245,13 +266,18 @@ export default function MonitoringTablePage() {
         className={`p-4 border-b border-r border-gray-200 relative group select-none ${className}`}
         style={{ width }}
       >
-        <div className="flex items-center justify-between">
-          <span className="font-bold text-gray-700 text-sm">{label}</span>
+        {/* Klik Header untuk buka/tutup Dropdown */}
+        <div
+          className="flex items-center justify-between cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveDropdown(isOpen ? null : (field as string));
+          }}
+        >
+          <span className="font-bold text-gray-700 text-sm hover:text-pln-primary transition-colors">
+            {label}
+          </span>
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setActiveDropdown(isOpen ? null : (field as string));
-            }}
             className={`p-1 rounded hover:bg-black/10 transition-colors ${activeFilter ? "text-pln-primary font-bold" : "text-gray-400"}`}
           >
             <Filter size={14} fill={activeFilter ? "currentColor" : "none"} />
@@ -260,18 +286,22 @@ export default function MonitoringTablePage() {
 
         {/* DROPDOWN MENU */}
         {isOpen && (
-          <div className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-300 shadow-xl rounded-md z-50 text-left font-normal animate-in fade-in zoom-in-95 duration-100">
+          <div
+            // FIX PENTING: stopPropagation agar klik di dalam TIDAK menutup dropdown
+            onClick={(e) => e.stopPropagation()}
+            className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-300 shadow-xl rounded-md z-50 text-left font-normal animate-in fade-in zoom-in-95 duration-100"
+          >
             {/* Sort Section */}
             <div className="p-2 border-b border-gray-100">
               <button
                 onClick={() => handleSort(field as keyof Asset, "asc")}
-                className="flex items-center gap-3 w-full px-2 py-2 hover:bg-gray-100 text-gray-700 text-sm rounded"
+                className="flex items-center gap-3 w-full px-2 py-2 hover:bg-gray-100 text-gray-700 text-sm rounded transition-colors"
               >
                 <ArrowUp size={16} className="text-gray-500" /> Sort A to Z
               </button>
               <button
                 onClick={() => handleSort(field as keyof Asset, "desc")}
-                className="flex items-center gap-3 w-full px-2 py-2 hover:bg-gray-100 text-gray-700 text-sm rounded"
+                className="flex items-center gap-3 w-full px-2 py-2 hover:bg-gray-100 text-gray-700 text-sm rounded transition-colors"
               >
                 <ArrowDown size={16} className="text-gray-500" /> Sort Z to A
               </button>
@@ -290,29 +320,29 @@ export default function MonitoringTablePage() {
 
               <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-1">
                 {/* Select All */}
-                <label className="flex items-center gap-2 px-2 py-1 hover:bg-blue-50 rounded cursor-pointer">
+                <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-blue-50 rounded cursor-pointer w-full select-none transition-colors">
                   <input
                     type="checkbox"
                     checked={isAllSelected}
                     onChange={() => handleSelectAll(stateKey)}
-                    className="rounded text-pln-primary focus:ring-0"
+                    className="rounded text-pln-primary focus:ring-0 cursor-pointer"
                   />
-                  <span className="text-sm text-gray-700">(Select All)</span>
+                  <span className="text-sm text-gray-700 font-medium">
+                    (Select All)
+                  </span>
                 </label>
 
                 {uniqueValues.map((val, idx) => {
                   const isChecked =
                     isAllSelected || activeFilter?.includes(val);
-                  // Fitur Tambahan: Tooltip menampilkan Nama Kategori (jika ada) saat hover di filter
-                  const tooltipText = ASSET_CATEGORY_MAP[val]
-                    ? `${val} - ${ASSET_CATEGORY_MAP[val]}`
-                    : val;
+                  // Tooltip: Val sudah berupa Label (misal: Trafo), jadi tidak perlu map ulang
+                  const tooltipText = val;
 
                   return (
                     <label
                       key={idx}
-                      className="flex items-center gap-2 px-2 py-1 hover:bg-blue-50 rounded cursor-pointer"
                       title={tooltipText}
+                      className="flex items-center gap-2 px-2 py-1.5 hover:bg-blue-50 rounded cursor-pointer w-full select-none transition-colors"
                     >
                       <input
                         type="checkbox"
@@ -330,7 +360,7 @@ export default function MonitoringTablePage() {
                             handleFilterChange(stateKey, val, e.target.checked);
                           }
                         }}
-                        className="rounded text-pln-primary focus:ring-0"
+                        className="rounded text-pln-primary focus:ring-0 cursor-pointer"
                       />
                       <span className="text-sm text-gray-700 truncate">
                         {val}
@@ -365,32 +395,13 @@ export default function MonitoringTablePage() {
     );
   };
 
-  // Tutup dropdown jika klik luar
+  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = () => setActiveDropdown(null);
     window.addEventListener("click", handleClickOutside);
     return () => window.removeEventListener("click", handleClickOutside);
   }, []);
 
-  const formatRupiah = (num: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-    }).format(num);
-  };
-
-  const handleDownloadExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(finalData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Data_Aset");
-    XLSX.writeFile(
-      workbook,
-      `Monitoring_Aset_${new Date().toISOString()}.xlsx`,
-    );
-  };
-
-  // Helper simple sort
   const SimpleSortHeader = ({
     label,
     field,
@@ -426,7 +437,7 @@ export default function MonitoringTablePage() {
 
   return (
     <div className="h-[calc(100vh-100px)] flex flex-col space-y-4">
-      {/* HEADER PAGE */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <div>
           <h1 className="text-2xl font-bold text-pln-primary">
@@ -460,14 +471,12 @@ export default function MonitoringTablePage() {
             <p className="text-gray-400 font-medium">Memuat data tabel...</p>
           </div>
         ) : (
-          <table className="min-w-[3500px] w-full text-sm text-left border-collapse">
+          <table className="min-w-[4500px] w-full text-sm text-left border-collapse">
             <thead className="bg-gray-100 text-gray-700 font-bold sticky top-0 z-20 shadow-sm uppercase text-xs tracking-wider">
               <tr>
                 <th className="p-4 border-b w-16 text-center sticky left-0 z-30 bg-gray-100 border-r border-gray-200">
                   No
                 </th>
-
-                {/* 1. NO ASET (Sticky) */}
                 <th
                   className="p-4 border-b w-40 sticky left-16 z-30 bg-gray-100 border-r border-gray-200 cursor-pointer hover:bg-gray-200"
                   onClick={() =>
@@ -488,21 +497,17 @@ export default function MonitoringTablePage() {
                   </div>
                 </th>
 
-                {/* 2. FILTERABLE COLUMNS */}
                 <ColumnHeader
                   label="No. ATTB"
                   field="no_attb"
                   width="200px"
                   className="bg-cyan-50/50"
                 />
-
-                {/* KATEGORI ASET: TAMPIL ANGKA/KODE SAJA */}
                 <ColumnHeader
                   label="Kategori Aset (AT Class)"
                   field="jenis_aset"
                   width="250px"
                 />
-
                 <SimpleSortHeader
                   label="Merk / Type"
                   field="merk_type"
@@ -516,12 +521,11 @@ export default function MonitoringTablePage() {
                   isStatus
                 />
 
-                {/* NUMERIC COLUMNS */}
                 <SimpleSortHeader
-                  label="Nilai Buku"
+                  label="End Acq Value"
                   field="nilai_buku"
                   width="160px"
-                  className="text-right"
+                  className="text-right bg-emerald-50/30"
                 />
                 <SimpleSortHeader
                   label="Nilai Tafsiran"
@@ -536,7 +540,6 @@ export default function MonitoringTablePage() {
                   className="text-center"
                 />
 
-                {/* KOLOM SURAT */}
                 <ColumnHeader
                   label="No. Surat AE-1"
                   field="no_surat_ae1"
@@ -568,6 +571,31 @@ export default function MonitoringTablePage() {
                   className="bg-green-50/50"
                 />
 
+                <ColumnHeader
+                  label="Persetujuan Dekom"
+                  field="persetujuan_dekom"
+                  width="200px"
+                  className="bg-gray-50"
+                />
+                <ColumnHeader
+                  label="Lelang"
+                  field="lelang"
+                  width="200px"
+                  className="bg-gray-50"
+                />
+                <ColumnHeader
+                  label="Pengangkutan"
+                  field="pengangkutan"
+                  width="200px"
+                  className="bg-gray-50"
+                />
+                <ColumnHeader
+                  label="Selesai"
+                  field="selesai"
+                  width="200px"
+                  className="bg-gray-50"
+                />
+
                 <th className="p-4 border-b min-w-[300px]">Keterangan</th>
               </tr>
             </thead>
@@ -581,7 +609,6 @@ export default function MonitoringTablePage() {
                   <td className="p-4 text-center text-gray-500 font-medium sticky left-0 z-10 bg-white group-hover:bg-blue-50/30 border-r border-gray-100">
                     {i + 1}
                   </td>
-
                   <td className="p-4 font-mono font-bold text-pln-primary sticky left-16 z-10 bg-white group-hover:bg-blue-50/30 border-r border-gray-100">
                     <Link
                       href={`/dashboard/monitoring/${item.id}`}
@@ -590,16 +617,12 @@ export default function MonitoringTablePage() {
                       {item.no_aset}
                     </Link>
                   </td>
-
                   <td className="p-4 text-xs font-mono text-cyan-700 font-bold bg-cyan-50/10 border-x border-gray-100">
                     {item.no_attb || "-"}
                   </td>
 
-                  {/* TAMPIL ANGKA KODE ASET */}
-                  <td
-                    className="p-4 font-medium text-gray-800 text-base"
-                    title={ASSET_CATEGORY_MAP[item.jenis_aset]}
-                  >
+                  {/* KOLOM KATEGORI (SUDAH JADI TEXT) */}
+                  <td className="p-4 font-medium text-gray-800 text-base">
                     {item.jenis_aset}
                   </td>
 
@@ -607,7 +630,6 @@ export default function MonitoringTablePage() {
                   <td className="p-4 text-gray-600 flex items-center gap-1">
                     📍 {item.lokasi}
                   </td>
-
                   <td className="p-4 text-center">
                     <span
                       className={`px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wide border shadow-sm whitespace-nowrap ${
@@ -625,8 +647,7 @@ export default function MonitoringTablePage() {
                       {getStatusLabel(item.current_step)}
                     </span>
                   </td>
-
-                  <td className="p-4 text-right font-mono text-gray-600">
+                  <td className="p-4 text-right font-mono text-gray-700 font-semibold bg-emerald-50/10">
                     {formatRupiah(item.nilai_buku || 0)}
                   </td>
                   <td className="p-4 text-right font-mono font-bold text-pln-gold text-base">
@@ -635,7 +656,6 @@ export default function MonitoringTablePage() {
                   <td className="p-4 text-center text-gray-600 font-medium">
                     {item.konversi_kg} kg
                   </td>
-
                   <td className="p-4 text-xs font-mono text-gray-600 bg-blue-50/10 border-l border-gray-50">
                     {item.no_surat_ae1 || "-"}
                   </td>
@@ -651,16 +671,24 @@ export default function MonitoringTablePage() {
                   <td className="p-4 text-xs font-mono text-gray-600 bg-green-50/10 border-l border-gray-50">
                     {item.no_surat_sk || "-"}
                   </td>
+
+                  <td className="p-4 text-gray-600">
+                    {item.persetujuan_dekom || "-"}
+                  </td>
+                  <td className="p-4 text-gray-600">{item.lelang || "-"}</td>
+                  <td className="p-4 text-gray-600">
+                    {item.pengangkutan || "-"}
+                  </td>
+                  <td className="p-4 text-gray-600">{item.selesai || "-"}</td>
                   <td className="p-4 text-gray-500 text-sm italic max-w-[300px] truncate">
                     {item.keterangan || "-"}
                   </td>
                 </tr>
               ))}
-
               {finalData.length === 0 && (
                 <tr>
                   <td
-                    colSpan={16}
+                    colSpan={20}
                     className="p-12 text-center text-gray-400 bg-gray-50 italic border-t border-gray-100"
                   >
                     <p className="text-lg font-medium mb-1">
@@ -671,6 +699,27 @@ export default function MonitoringTablePage() {
                 </tr>
               )}
             </tbody>
+            {finalData.length > 0 && (
+              <tfoot className="bg-gray-100 font-bold text-gray-800 border-t-2 border-gray-300">
+                <tr>
+                  <td className="p-4 text-center sticky left-0 bg-gray-100 z-10 border-r border-gray-300 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                    TOTAL
+                  </td>
+                  <td className="p-4 sticky left-16 bg-gray-100 z-10 border-r border-gray-300 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]"></td>
+                  <td className="p-4 bg-gray-100 border-r border-gray-200"></td>
+                  <td className="p-4 bg-gray-100 border-r border-gray-200"></td>
+                  <td className="p-4 bg-gray-100 border-r border-gray-200"></td>
+                  <td className="p-4 bg-gray-100 border-r border-gray-200"></td>
+                  <td className="p-4 bg-gray-100 border-r border-gray-200 text-right text-gray-500 uppercase text-xs tracking-wider">
+                    Grand Total:
+                  </td>
+                  <td className="p-4 text-right font-mono text-lg text-emerald-700 bg-emerald-100/50 border-x border-emerald-300 shadow-inner">
+                    {formatRupiah(totalEndAcqValue)}
+                  </td>
+                  <td className="p-4 bg-gray-100" colSpan={12}></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         )}
       </div>

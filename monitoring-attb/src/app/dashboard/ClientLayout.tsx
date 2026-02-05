@@ -20,109 +20,97 @@ import Image from "next/image";
 
 // --- KONFIGURASI WAKTU LOGOUT (15 MENIT) ---
 const TIMEOUT_MS = 15 * 60 * 1000;
+const STORAGE_KEY = "last_activity_timestamp"; // Key untuk simpan waktu
 
 export default function ClientLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // 1. Hook Dasar (useState, useRouter, etc)
+  // 1. Hook Dasar
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const pathname = usePathname();
   const lastActivityRef = useRef(Date.now());
 
-  // State untuk Avatar Header (Opsional: agar sinkron dengan profil)
+  // State Data User
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false); // KEMBALIKAN STATE ADMIN
 
-  // --- FIX UTAMA: BERSIHKAN NOTIFIKASI SAAT MOUNT ---
-  useEffect(() => {
-    // Menghapus semua toast yang 'nyangkut' dari halaman Login
-    toast.dismiss();
-
-    // Opsional: Ambil foto profil untuk Header
-    const getAvatar = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user?.user_metadata?.avatar_url) {
-        setAvatarUrl(user.user_metadata.avatar_url);
-      }
-    };
-    getAvatar();
-  }, []);
-  // --------------------------------------------------
-
-  // 2. Callback Logout
-  const handleAutoLogout = useCallback(async () => {
+  // --- FUNGSI LOGOUT ---
+  const performLogout = useCallback(async (isAuto = false) => {
     try {
-      toast.dismiss(); // Bersihkan dulu sebelum pesan baru
-      toast.error("Sesi habis. Mengalihkan...", { duration: 3000 });
+      if (isAuto) {
+        toast.dismiss();
+        toast.error("Sesi kedaluwarsa. Silakan login kembali.", {
+          duration: 4000,
+        });
+      } else {
+        toast.loading("Keluar sistem...");
+      }
+
       await supabase.auth.signOut();
+
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.clear();
+        sessionStorage.clear();
+      }
+
+      window.location.href = "/";
     } catch (error) {
-      console.error("Auto logout error", error);
+      console.error("Logout error", error);
       window.location.href = "/";
     }
   }, []);
 
-  const handleManualLogout = async () => {
-    toast.dismiss();
-    const toastId = toast.loading("Keluar sistem...");
-    try {
-      await supabase.auth.signOut();
-      toast.success("Berhasil keluar", { id: toastId });
-    } catch (error) {
-      console.error("Manual logout error:", error);
-      toast.error("Gagal logout", { id: toastId });
-    }
-  };
-
-  // 3. Effect: Auth State Listener (Satpam Global)
+  // --- 1. CEK SESI & ROLE SAAT LOAD ---
   useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") {
-        localStorage.clear();
-        sessionStorage.clear();
-        window.location.href = "/"; // Hard Redirect
-      }
-    });
+    const checkSessionAndRole = async () => {
+      // A. Cek Sesi Timeout
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) return;
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  // 4. Effect: Resize Listener (Responsif)
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth < 768) {
-        setIsMobile(true);
-        setSidebarOpen(false);
+      const storedLastActivity = localStorage.getItem(STORAGE_KEY);
+      if (storedLastActivity) {
+        const lastActiveTime = parseInt(storedLastActivity, 10);
+        const now = Date.now();
+        if (now - lastActiveTime > TIMEOUT_MS) {
+          performLogout(true);
+          return; // Stop eksekusi jika logout
+        } else {
+          localStorage.setItem(STORAGE_KEY, now.toString());
+        }
       } else {
-        setIsMobile(false);
-        setSidebarOpen(true);
+        localStorage.setItem(STORAGE_KEY, Date.now().toString());
+      }
+
+      // B. Cek Role User (Untuk Menyembunyikan Menu)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        if (user.user_metadata?.avatar_url) {
+          setAvatarUrl(user.user_metadata.avatar_url);
+        }
+        // Logika: Email mengandung 'admin' ATAU role metadata = 'admin'
+        const checkAdmin =
+          user.email?.includes("admin") || user.user_metadata?.role === "admin";
+        setIsAdmin(checkAdmin || false);
       }
     };
 
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
+    checkSessionAndRole();
+  }, [performLogout]);
 
-  // 5. Effect: Tutup Sidebar saat ganti halaman (Mobile Only)
+  // --- 2. UPDATE WAKTU SAAT AKTIVITAS ---
   useEffect(() => {
-    if (isMobile && isSidebarOpen) {
-      setSidebarOpen(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
-
-  // 6. Effect: Timer Auto Logout
-  useEffect(() => {
-    const resetTimer = () => {
-      lastActivityRef.current = Date.now();
+    const updateActivity = () => {
+      const now = Date.now();
+      lastActivityRef.current = now;
+      localStorage.setItem(STORAGE_KEY, now.toString());
     };
 
     const events = [
@@ -133,66 +121,91 @@ export default function ClientLayout({
       "touchstart",
       "click",
     ];
-
-    events.forEach((event) => window.addEventListener(event, resetTimer));
-    resetTimer();
+    events.forEach((event) => window.addEventListener(event, updateActivity));
 
     const intervalId = setInterval(() => {
       const now = Date.now();
-      const timeSinceLastActivity = now - lastActivityRef.current;
-
-      if (timeSinceLastActivity > TIMEOUT_MS) {
-        handleAutoLogout();
+      if (now - lastActivityRef.current > TIMEOUT_MS) {
+        performLogout(true);
         clearInterval(intervalId);
       }
     }, 10000);
 
     return () => {
-      events.forEach((event) => window.removeEventListener(event, resetTimer));
+      events.forEach((event) =>
+        window.removeEventListener(event, updateActivity),
+      );
       clearInterval(intervalId);
     };
-  }, [handleAutoLogout]);
+  }, [performLogout]);
+
+  // --- 3. RESPONSIVENESS ---
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setIsMobile(true);
+        setSidebarOpen(false);
+      } else {
+        setIsMobile(false);
+        setSidebarOpen(true);
+      }
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile && isSidebarOpen) setSidebarOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   // --- RENDER UI ---
   return (
-    <div className="flex min-h-screen bg-gray-50 relative">
-      {/* Toaster Global */}
+    <div className="flex h-screen bg-gray-50 overflow-hidden relative">
       <Toaster position="top-center" />
 
-      {/* Overlay Gelap (Mobile) */}
+      {/* Overlay Mobile */}
       {isMobile && isSidebarOpen && (
         <div
           onClick={() => setSidebarOpen(false)}
-          className="fixed inset-0 bg-black/50 z-30 backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 bg-black/50 z-30 backdrop-blur-sm transition-opacity duration-300"
         />
       )}
 
-      {/* Sidebar */}
+      {/* SIDEBAR */}
       <aside
         className={`
-          fixed md:sticky top-0 h-screen z-40 bg-pln-primary text-white shadow-xl transition-all duration-300 ease-in-out flex flex-col
-          ${
-            isSidebarOpen
-              ? "translate-x-0 w-64"
-              : "-translate-x-full md:translate-x-0 md:w-20"
-          }
+          fixed md:static top-0 left-0 h-full z-40 bg-pln-primary text-white shadow-2xl flex flex-col shrink-0 overflow-hidden
+          transition-[width] duration-300 ease-in-out
+          ${isSidebarOpen ? "w-72" : isMobile ? "w-0" : "w-20"}
+          ${isMobile && isSidebarOpen ? "translate-x-0" : ""}
+          ${isMobile && !isSidebarOpen ? "-translate-x-full" : ""}
         `}
       >
         {/* Header Sidebar */}
-        <div className="h-20 flex items-center justify-between px-4 border-b border-white/10 bg-white shrink-0">
-          <div className="relative w-full h-12 flex items-center justify-center">
-            <Image
-              src="/Logo.png"
-              alt="Logo PLN"
-              fill
-              priority
-              className="object-contain"
-            />
+        <div className="h-24 flex items-center px-4 border-b border-white/10 bg-white/5 shrink-0 relative">
+          <div
+            className={`flex items-center w-full transition-all duration-300 ${!isSidebarOpen ? "justify-center" : "justify-start"}`}
+          >
+            <div
+              className={`relative transition-all duration-300 bg-white rounded-xl flex items-center justify-center shadow-lg
+                ${isSidebarOpen ? "w-48 h-12 px-4" : "w-10 h-10 p-1"}`}
+            >
+              <Image
+                src="/Logo_1.png"
+                alt="Logo PLN"
+                fill
+                priority
+                className="object-contain"
+                sizes="(max-width: 768px) 100vw, 33vw"
+              />
+            </div>
           </div>
           {isMobile && isSidebarOpen && (
             <button
               onClick={() => setSidebarOpen(false)}
-              className="text-gray-500 hover:text-red-500 absolute right-0 mr-4"
+              className="absolute right-4 text-white/70 hover:text-white transition-colors"
             >
               <X size={24} />
             </button>
@@ -200,86 +213,94 @@ export default function ClientLayout({
         </div>
 
         {/* Menu Items */}
-        <div className="flex-1 py-6 px-3 space-y-2 overflow-y-auto custom-scrollbar">
+        <div className="flex-1 py-6 px-3 space-y-2 overflow-y-auto custom-scrollbar overflow-x-hidden">
           <SidebarItem
             href="/dashboard"
-            icon={<LayoutDashboard size={20} />}
+            icon={<LayoutDashboard size={22} />}
             label="Dashboard"
             isOpen={isSidebarOpen}
           />
-
           <SidebarItem
             href="/dashboard/progress"
-            icon={<Activity size={20} />}
+            icon={<Activity size={22} />}
             label="Progress Aset"
             isOpen={isSidebarOpen}
           />
-
           <SidebarItem
             href="/dashboard/monitoring"
-            icon={<TableProperties size={20} />}
+            icon={<TableProperties size={22} />}
             label="Monitoring Data"
             isOpen={isSidebarOpen}
           />
-
           <SidebarItem
             href="/dashboard/help"
-            icon={<BookOpen size={20} />}
+            icon={<BookOpen size={22} />}
             label="Panduan & SOP"
             isOpen={isSidebarOpen}
           />
 
-          <div className="pt-4 pb-2 border-t border-white/10 mt-4">
-            <p
-              className={`text-xs text-pln-accent/70 font-semibold px-4 mb-2 uppercase ${!isSidebarOpen && "hidden"}`}
-            >
-              Menu Input
-            </p>
-            <SidebarItem
-              href="/dashboard/input"
-              icon={<FilePlus size={20} />}
-              label="Input Usulan"
-              isOpen={isSidebarOpen}
-            />
-          </div>
+          {/* MENU INPUT: HANYA MUNCUL JIKA ADMIN */}
+          {isAdmin && (
+            <>
+              <div
+                className={`pt-6 pb-2 border-t border-white/10 mt-2 transition-opacity duration-300 ${!isSidebarOpen ? "opacity-0 hidden" : "opacity-100 block"}`}
+              >
+                <p className="text-xs text-pln-accent/80 font-bold px-4 mb-2 uppercase tracking-wider whitespace-nowrap">
+                  Menu Input
+                </p>
+              </div>
+              <SidebarItem
+                href="/dashboard/input"
+                icon={<FilePlus size={22} />}
+                label="Input Usulan"
+                isOpen={isSidebarOpen}
+              />
+            </>
+          )}
         </div>
 
         {/* Footer Sidebar */}
-        <div className="p-4 border-t border-white/10 shrink-0">
+        <div className="p-4 border-t border-white/10 shrink-0 bg-black/10">
           <button
-            onClick={handleManualLogout}
-            className="flex items-center gap-3 text-red-300 hover:text-white transition-colors w-full p-2 rounded-lg hover:bg-white/10"
+            onClick={() => performLogout(false)}
+            className={`flex items-center gap-3 text-red-200 hover:text-white hover:bg-white/10 transition-all w-full p-3 rounded-xl group relative ${!isSidebarOpen ? "justify-center" : ""}`}
+            title={!isSidebarOpen ? "Logout" : ""}
           >
-            <LogOut size={20} />
-            {isSidebarOpen && <span className="font-medium">Logout</span>}
+            <div className="shrink-0">
+              <LogOut size={22} />
+            </div>
+            <span
+              className={`font-medium whitespace-nowrap transition-opacity duration-200 ${!isSidebarOpen ? "opacity-0 w-0 hidden" : "opacity-100 w-auto block"}`}
+            >
+              Logout
+            </span>
           </button>
         </div>
       </aside>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white border-b-4 border-pln-gold flex items-center justify-between px-4 md:px-6 shadow-sm sticky top-0 z-20">
+      {/* MAIN CONTENT */}
+      <div className="flex-1 flex flex-col h-full min-w-0 relative bg-gray-50 transition-all duration-300">
+        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-8 shadow-sm shrink-0 z-20">
           <button
             onClick={() => setSidebarOpen(!isSidebarOpen)}
-            className="text-pln-primary hover:bg-gray-100 p-2 rounded-lg"
+            className="text-pln-primary hover:bg-gray-100 p-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-pln-primary/20"
           >
-            <Menu />
+            <Menu className="w-6 h-6" />
           </button>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <div className="text-right hidden md:block">
               <p className="text-sm font-bold text-pln-primary">User Active</p>
               <Link
                 href="/dashboard/profile"
-                className="text-xs text-gray-500 hover:text-pln-accent"
+                className="text-xs text-gray-500 hover:text-pln-accent transition-colors font-medium"
               >
                 Lihat Profil
               </Link>
             </div>
 
-            {/* Foto Profil di Header (Sinkron dengan Profil) */}
-            <Link href="/dashboard/profile">
-              <div className="w-9 h-9 bg-gray-200 rounded-full border-2 border-pln-primary cursor-pointer hover:shadow-md flex items-center justify-center overflow-hidden relative">
+            <Link href="/dashboard/profile" className="relative group block">
+              <div className="w-10 h-10 bg-gray-100 rounded-full border-2 border-pln-primary/20 cursor-pointer hover:border-pln-primary hover:shadow-md flex items-center justify-center overflow-hidden relative transition-all duration-300">
                 {avatarUrl ? (
                   <Image
                     src={avatarUrl}
@@ -290,10 +311,10 @@ export default function ClientLayout({
                 ) : (
                   <Image
                     src="/Logo.png"
-                    alt="Profile Placeholder"
-                    width={36}
-                    height={36}
-                    className="object-cover opacity-50"
+                    alt="Profile"
+                    width={40}
+                    height={40}
+                    className="object-cover opacity-50 p-1"
                   />
                 )}
               </div>
@@ -301,7 +322,7 @@ export default function ClientLayout({
           </div>
         </header>
 
-        <main className="p-4 md:p-6 flex-1 overflow-auto">
+        <main className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -315,7 +336,7 @@ export default function ClientLayout({
   );
 }
 
-// Helper Component Sidebar Item
+// Helper Sidebar Item
 function SidebarItem({
   href,
   icon,
@@ -333,18 +354,23 @@ function SidebarItem({
   return (
     <Link
       href={href}
-      className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 group relative
-      ${isActive ? "bg-pln-accent text-white shadow-md font-semibold" : "text-gray-300 hover:bg-white/10 hover:text-white"}`}
+      className={`flex items-center px-3 py-3 rounded-xl transition-colors duration-200 group relative mb-1
+      ${isActive ? "bg-white text-pln-primary shadow-lg font-bold" : "text-gray-300 hover:bg-white/10 hover:text-white"}
+      ${!isOpen ? "justify-center" : "gap-3"}`}
+      title={!isOpen ? label : ""}
     >
       <div
-        className={`${isActive ? "text-white" : "text-pln-gold group-hover:text-white"}`}
+        className={`shrink-0 transition-colors duration-200 ${isActive ? "text-pln-primary" : "text-pln-gold group-hover:text-white"}`}
       >
         {icon}
       </div>
-      {isOpen ? (
-        <span>{label}</span>
-      ) : (
-        <div className="absolute left-14 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 hidden md:block">
+      <span
+        className={`whitespace-nowrap overflow-hidden transition-opacity duration-200 ${!isOpen ? "opacity-0 w-0 hidden" : "opacity-100 w-auto block"}`}
+      >
+        {label}
+      </span>
+      {!isOpen && (
+        <div className="absolute left-16 top-1/2 -translate-y-1/2 bg-gray-900 text-white text-xs px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none z-50 whitespace-nowrap shadow-xl border border-white/10 transition-opacity duration-200">
           {label}
         </div>
       )}

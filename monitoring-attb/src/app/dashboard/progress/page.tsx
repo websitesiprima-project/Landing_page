@@ -14,7 +14,7 @@ import {
   Trash2,
   SortAsc,
   MapPin,
-  Undo2, // Ikon Revert
+  Undo2,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
@@ -31,7 +31,6 @@ const SORT_OPTIONS = [
   { value: "sap_desc", label: "No. Aset (9-0)" },
 ];
 
-// --- DEFINISI TIPE DATA ---
 interface AssetData {
   id: string;
   no_aset: string;
@@ -60,17 +59,14 @@ interface AssetData {
   [key: string]: string | number | null | undefined;
 }
 
-// 1. UPDATE DAFTAR STASIUN (WORKFLOW BARU 8 TAHAP)
 const STATIONS = [
   { id: 1, label: "AE-1 (Inventarisasi)", code: "AE-1" },
   { id: 2, label: "AE-2 (Penetapan)", code: "AE-2" },
   { id: 3, label: "AE-3 (Usulan)", code: "AE-3" },
   { id: 4, label: "AE-4 (Review SPI)", code: "AE-4" },
-  // Station Baru
   { id: 5, label: "Persetujuan Dekom", code: "DEKOM" },
   { id: 6, label: "Lelang", code: "LELANG" },
   { id: 7, label: "Pengangkutan", code: "ANGKUT" },
-  // Station Akhir
   { id: 8, label: "Selesai (Penghapusan)", code: "SELESAI" },
 ];
 
@@ -89,12 +85,16 @@ export default function ProgressPage() {
   const [batchSurat, setBatchSurat] = useState("");
   const [moving, setMoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [reverting, setReverting] = useState(false); // State baru untuk Revert
+  const [reverting, setReverting] = useState(false);
 
   // Edit Modal State
   const [isEditModalOpen, setEditModalOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<AssetData | null>(null);
 
+  // --- ROLE STATE ---
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Fetch Data & Role Check
   const fetchData = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -112,6 +112,17 @@ export default function ProgressPage() {
   }, []);
 
   useEffect(() => {
+    const checkUserRole = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const checkAdmin =
+          user.email?.includes("admin") || user.user_metadata?.role === "admin";
+        setIsAdmin(checkAdmin || false);
+      }
+    };
+    checkUserRole();
     fetchData();
   }, [fetchData]);
 
@@ -169,25 +180,23 @@ export default function ProgressPage() {
     else setSelectedIds(new Set(filteredAssets.map((a) => a.id)));
   };
 
-  // --- HANDLER REVERT (FITUR BARU) ---
+  // --- HANDLER REVERT ---
   const handleBatchRevert = async () => {
     if (selectedIds.size === 0) return;
-    if (activeStation <= 1) {
+    if (activeStation <= 1)
       return toast.error("Aset di Tahap 1 (AE-1) tidak bisa dikembalikan.");
-    }
-
-    const isConfirmed = window.confirm(
-      `Yakin ingin mengembalikan ${selectedIds.size} aset ke tahap sebelumnya?\n(Nomor Surat tahap ini akan dihapus)`,
-    );
-    if (!isConfirmed) return;
+    if (
+      !window.confirm(
+        `Yakin ingin mengembalikan ${selectedIds.size} aset ke tahap sebelumnya?`,
+      )
+    )
+      return;
 
     setReverting(true);
     try {
       const prevStep = activeStation - 1;
       const prevStatusLabel =
         STATIONS.find((s) => s.id === prevStep)?.label || `Tahap ${prevStep}`;
-
-      // FIX: Gunakan tipe spesifik string | number | null (bukan any)
       const updatePayload: Record<string, string | number | null> = {
         current_step: prevStep,
         status: prevStatusLabel,
@@ -202,7 +211,6 @@ export default function ProgressPage() {
         .from("attb_assets")
         .update(updatePayload)
         .in("id", Array.from(selectedIds));
-
       if (error) throw error;
 
       toast.success(`Berhasil mengembalikan ${selectedIds.size} aset.`);
@@ -218,10 +226,8 @@ export default function ProgressPage() {
 
   const handleBatchDelete = async () => {
     if (selectedIds.size === 0) return;
-    const isConfirmed = window.confirm(
-      `PERINGATAN: Hapus ${selectedIds.size} aset terpilih?`,
-    );
-    if (!isConfirmed) return;
+    if (!window.confirm(`PERINGATAN: Hapus ${selectedIds.size} aset terpilih?`))
+      return;
 
     setDeleting(true);
     try {
@@ -247,14 +253,7 @@ export default function ProgressPage() {
     const needsSurat = nextStep <= 4 || nextStep === 8;
 
     if (needsSurat && !batchSurat.trim()) {
-      toast.error("Mohon isi Nomor Surat Tujuan!", {
-        style: {
-          border: "1px solid #EAB308",
-          color: "#854D0E",
-          background: "#FEF9C3",
-        },
-      });
-      return;
+      return toast.error("Mohon isi Nomor Surat Tujuan!");
     }
 
     const selectedAssetsData = assets.filter((a) => selectedIds.has(a.id));
@@ -265,22 +264,21 @@ export default function ProgressPage() {
         (asset.rupiah_per_kg || 0) <= 0;
       let suratValidation = false;
       if (activeStation === 2) {
-        const ae2Missing = !asset.no_surat_ae2 || asset.no_surat_ae2 === "-";
-        const attbMissing = !asset.no_attb || asset.no_attb === "-";
-        if (ae2Missing || attbMissing) suratValidation = true;
+        if (
+          !asset.no_surat_ae2 ||
+          asset.no_surat_ae2 === "-" ||
+          !asset.no_attb ||
+          asset.no_attb === "-"
+        )
+          suratValidation = true;
       }
       return basicValidation || suratValidation;
     });
 
     if (incompleteAssets.length > 0) {
-      toast.error(
+      return toast.error(
         `Gagal! ${incompleteAssets.length} Aset belum lengkap (Foto/Data).`,
-        {
-          duration: 4000,
-          style: { maxWidth: "500px", fontWeight: "bold" },
-        },
       );
-      return;
     }
 
     setMoving(true);
@@ -291,11 +289,8 @@ export default function ProgressPage() {
           STATIONS.find((s) => s.id === nextStep)?.label || `Tahap ${nextStep}`,
       };
 
-      if (nextStep <= 4) {
-        updatePayload[`no_surat_ae${nextStep}`] = batchSurat;
-      } else if (nextStep === 8) {
-        updatePayload["no_surat_sk"] = batchSurat;
-      }
+      if (nextStep <= 4) updatePayload[`no_surat_ae${nextStep}`] = batchSurat;
+      else if (nextStep === 8) updatePayload["no_surat_sk"] = batchSurat;
 
       const { error } = await supabase
         .from("attb_assets")
@@ -303,9 +298,7 @@ export default function ProgressPage() {
         .in("id", Array.from(selectedIds));
       if (error) throw error;
 
-      toast.success(
-        `Sukses! ${selectedIds.size} aset dipindahkan ke ${STATIONS.find((s) => s.id === nextStep)?.code}.`,
-      );
+      toast.success(`Sukses! ${selectedIds.size} aset dipindahkan.`);
       setTransitModalOpen(false);
       setBatchSurat("");
       setSelectedIds(new Set());
@@ -338,7 +331,6 @@ export default function ProgressPage() {
             Monitor pergerakan aset dari AE-1 hingga Penghapusan.
           </p>
         </div>
-        {/* SEARCH & SORT */}
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
@@ -369,7 +361,7 @@ export default function ProgressPage() {
         </div>
       </div>
 
-      {/* TABS (SCROLLABLE) */}
+      {/* TABS */}
       <div className="flex overflow-x-auto gap-2 pb-2 border-b border-gray-200 no-scrollbar">
         {STATIONS.map((station) => {
           const count = assets.filter(
@@ -401,8 +393,8 @@ export default function ProgressPage() {
         })}
       </div>
 
-      {/* ACTION BAR */}
-      {selectedIds.size > 0 && (
+      {/* ACTION BAR (HANYA MUNCUL JIKA ADMIN & ADA SELEKSI) */}
+      {selectedIds.size > 0 && isAdmin && (
         <div className="sticky top-4 z-20 bg-white border border-blue-200 p-4 rounded-xl shadow-lg flex flex-col sm:flex-row justify-between items-center gap-4 animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center gap-3">
             <div className="bg-blue-100 p-2 rounded-lg text-blue-600">
@@ -418,21 +410,18 @@ export default function ProgressPage() {
             </div>
           </div>
           <div className="flex gap-3">
-            {/* TOMBOL REVERT */}
             <button
               onClick={handleBatchRevert}
               disabled={reverting || moving || deleting || activeStation <= 1}
               className="bg-orange-50 text-orange-600 border border-orange-200 px-4 py-2.5 rounded-lg font-bold shadow-sm hover:bg-orange-100 flex items-center gap-2 active:scale-95 disabled:opacity-50"
-              title="Kembalikan ke tahap sebelumnya"
             >
               {reverting ? (
                 <Loader2 className="animate-spin" size={18} />
               ) : (
                 <Undo2 size={18} />
-              )}
+              )}{" "}
               <span className="hidden sm:inline">Revert</span>
             </button>
-
             <button
               onClick={handleBatchDelete}
               disabled={deleting || moving || reverting}
@@ -477,38 +466,47 @@ export default function ProgressPage() {
         </div>
       ) : (
         <>
-          <div className="flex items-center gap-2 mb-2 px-1">
-            <input
-              type="checkbox"
-              id="selectAll"
-              checked={
-                selectedIds.size === filteredAssets.length &&
-                filteredAssets.length > 0
-              }
-              onChange={toggleSelectAll}
-              className="w-4 h-4 text-pln-primary rounded cursor-pointer accent-pln-primary"
-            />
-            <label
-              htmlFor="selectAll"
-              className="text-sm font-bold text-gray-600 cursor-pointer"
-            >
-              Pilih Semua ({filteredAssets.length})
-            </label>
-          </div>
+          {/* SELECT ALL HANYA UNTUK ADMIN */}
+          {isAdmin && (
+            <div className="flex items-center gap-2 mb-2 px-1">
+              <input
+                type="checkbox"
+                id="selectAll"
+                checked={
+                  selectedIds.size === filteredAssets.length &&
+                  filteredAssets.length > 0
+                }
+                onChange={toggleSelectAll}
+                className="w-4 h-4 text-pln-primary rounded cursor-pointer accent-pln-primary"
+              />
+              <label
+                htmlFor="selectAll"
+                className="text-sm font-bold text-gray-600 cursor-pointer"
+              >
+                Pilih Semua ({filteredAssets.length})
+              </label>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-2">
             {filteredAssets.map((asset) => (
               <div
                 key={asset.id}
-                className={`bg-white border rounded-xl p-4 shadow-sm hover:shadow-md transition-all relative group ${selectedIds.has(asset.id) ? "ring-2 ring-blue-500 bg-blue-50/30 border-blue-200" : "border-gray-200"}`}
+                className={`bg-white border rounded-xl p-4 shadow-sm hover:shadow-md transition-all relative group 
+                ${selectedIds.has(asset.id) ? "ring-2 ring-blue-500 bg-blue-50/30 border-blue-200" : "border-gray-200"}`}
               >
-                <div className="absolute top-3 right-3 z-10">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(asset.id)}
-                    onChange={() => toggleSelect(asset.id)}
-                    className="w-5 h-5 cursor-pointer accent-blue-600"
-                  />
-                </div>
+                {/* CHECKBOX HANYA UNTUK ADMIN */}
+                {isAdmin && (
+                  <div className="absolute top-3 right-3 z-10">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(asset.id)}
+                      onChange={() => toggleSelect(asset.id)}
+                      className="w-5 h-5 cursor-pointer accent-blue-600"
+                    />
+                  </div>
+                )}
+
                 <div className="flex gap-3 items-start">
                   <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden shrink-0 border border-gray-200 relative">
                     {asset.foto_url ? (
@@ -553,22 +551,7 @@ export default function ProgressPage() {
                 </div>
                 <div className="mt-3 pt-3 border-t border-gray-100 text-xs flex justify-between items-center text-gray-500">
                   <span>Surat saat ini:</span>
-                  <span
-                    className="font-mono font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded max-w-[120px] truncate"
-                    title={
-                      activeStation === 1
-                        ? asset.no_surat_ae1
-                        : activeStation === 2
-                          ? asset.no_surat_ae2
-                          : activeStation === 3
-                            ? asset.no_surat_ae3
-                            : activeStation === 4
-                              ? asset.no_surat_ae4
-                              : activeStation === 8
-                                ? asset.no_surat_sk
-                                : "-"
-                    }
-                  >
+                  <span className="font-mono font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded max-w-[120px] truncate">
                     {activeStation === 1
                       ? asset.no_surat_ae1
                       : activeStation === 2
@@ -582,22 +565,26 @@ export default function ProgressPage() {
                               : "-"}
                   </span>
                 </div>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    onClick={() => openEditModal(asset)}
-                    className="flex-1 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded border border-blue-100 flex items-center justify-center gap-1 transition-colors"
-                  >
-                    <Edit size={12} /> Edit Data
-                  </button>
-                </div>
+
+                {/* EDIT BUTTON HANYA UNTUK ADMIN */}
+                {isAdmin && (
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => openEditModal(asset)}
+                      className="flex-1 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded border border-blue-100 flex items-center justify-center gap-1 transition-colors"
+                    >
+                      <Edit size={12} /> Edit Data
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         </>
       )}
 
-      {/* --- MODAL TRANSIT --- */}
-      {isTransitModalOpen && (
+      {/* MODAL TRANSIT (HANYA ADMIN) */}
+      {isTransitModalOpen && isAdmin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md border-t-4 border-pln-primary">
             <h3 className="font-bold text-lg text-gray-800 mb-2">
@@ -610,8 +597,6 @@ export default function ProgressPage() {
               </strong>
               .
             </p>
-
-            {/* Input Surat hanya muncul jika BUKAN tahap intermediate (5,6,7) */}
             {!nextStepIsIntermediate && (
               <input
                 type="text"
@@ -621,14 +606,12 @@ export default function ProgressPage() {
                 className="w-full p-3 border rounded-lg mb-4"
               />
             )}
-
             {nextStepIsIntermediate && (
               <div className="bg-blue-50 text-blue-700 p-3 rounded-lg mb-4 text-xs">
                 Tahap ini tidak memerlukan input nomor surat. Klik Konfirmasi
                 untuk lanjut.
               </div>
             )}
-
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setTransitModalOpen(false)}
@@ -653,23 +636,26 @@ export default function ProgressPage() {
         </div>
       )}
 
-      <EditAssetModal
-        asset={{
-          ...editingAsset!, // Force unwrap karena kita tahu modal hanya muncul jika editingAsset ada
-          no_surat_ae1: editingAsset?.no_surat_ae1 ?? "",
-          no_surat_ae2: editingAsset?.no_surat_ae2 ?? "",
-          no_surat_ae3: editingAsset?.no_surat_ae3 ?? "",
-          no_surat_ae4: editingAsset?.no_surat_ae4 ?? "",
-          no_surat_sk: editingAsset?.no_surat_sk ?? "",
-          no_attb: editingAsset?.no_attb ?? "",
-        }}
-        isOpen={isEditModalOpen}
-        onClose={() => setEditModalOpen(false)}
-        onSuccess={() => {
-          fetchData();
-          setEditModalOpen(false);
-        }}
-      />
+      {/* EDIT MODAL (HANYA ADMIN) */}
+      {isAdmin && (
+        <EditAssetModal
+          asset={{
+            ...editingAsset!,
+            no_surat_ae1: editingAsset?.no_surat_ae1 ?? "",
+            no_surat_ae2: editingAsset?.no_surat_ae2 ?? "",
+            no_surat_ae3: editingAsset?.no_surat_ae3 ?? "",
+            no_surat_ae4: editingAsset?.no_surat_ae4 ?? "",
+            no_surat_sk: editingAsset?.no_surat_sk ?? "",
+            no_attb: editingAsset?.no_attb ?? "",
+          }}
+          isOpen={isEditModalOpen}
+          onClose={() => setEditModalOpen(false)}
+          onSuccess={() => {
+            fetchData();
+            setEditModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

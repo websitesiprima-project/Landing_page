@@ -151,7 +151,7 @@ export default function LandingPage() {
               </Link>
               <Link href="/about">
                 <button className="w-full sm:w-auto px-8 py-4 bg-[#01717f]/50 backdrop-blur-md border border-white/30 text-white font-medium rounded-xl hover:bg-white/10 transition-all flex items-center justify-center gap-2">
-                  <Database size={18} /> Dokumentasi SOP
+                  <Database size={18} /> Tentang ReValue
                 </button>
               </Link>
             </motion.div>

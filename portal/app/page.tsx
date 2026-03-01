@@ -134,7 +134,7 @@ export default function PortalGateway() {
               />
             </div>
             <h1 className="text-4xl md:text-5xl font-black text-slate-800 tracking-tight">
-              PORTAL <span className="text-[#01717f]">SIPRIMA</span>
+              PORTAL <span className="text-[#01717f]">UPT PLN MANADO</span>
             </h1>
           </div>
 

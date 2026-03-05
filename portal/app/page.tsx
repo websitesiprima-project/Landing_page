@@ -55,8 +55,12 @@ const applications = [
     title: "SAKTI",
     desc: "Sistem Aplikasi Konsolidasi Teknologi Informasi untuk integrasi data operasional UPT.",
     link: "https://sakti.plnuptmdo.com",
-    tag: "Integration App",
-    icon: <Database size={28} />,
+    tag: "Monitoring Contract Asset System",
+    icon: (
+      <span className="block w-full h-full relative">
+        <Image src="/logosaktibaru-removebg-preview.png" alt="Logo SAKTI" fill className="object-contain p-1" />
+      </span>
+    ),
     color: "from-purple-500 to-pink-400",
     textHover: "group-hover:text-purple-600",
     bgHover: "hover:shadow-[0_20px_40px_rgb(168,85,247,0.15)]",
@@ -101,8 +105,8 @@ export default function PortalGateway() {
         }}
       />
 
-      <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-[#01717f]/5 rounded-full blur-[120px] animate-pulse" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-[#e5b804]/5 rounded-full blur-[120px] animate-pulse delay-1000" />
+      <div className="absolute top-[-10%] left-[-10%] w-150 h-150 bg-[#01717f]/5 rounded-full blur-[120px] animate-pulse" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-150 h-150 bg-[#e5b804]/5 rounded-full blur-[120px] animate-pulse delay-1000" />
 
       {/* --- MAIN CONTENT --- */}
       <div className="relative z-10 w-full max-w-7xl flex flex-col items-center">
@@ -158,10 +162,10 @@ export default function PortalGateway() {
               transition={{ delay: index * 0.1 }}
               whileHover={{ y: -8 }}
               whileTap={{ scale: 0.98 }}
-              className={`group block h-full bg-white/80 backdrop-blur-xl rounded-[1.5rem] p-6 border border-white shadow-sm transition-all duration-300 relative overflow-hidden ${app.bgHover} ${app.borderColor}`}
+              className={`group block h-full bg-white/80 backdrop-blur-xl rounded-3xl p-6 border border-white shadow-sm transition-all duration-300 relative overflow-hidden ${app.bgHover} ${app.borderColor}`}
             >
               <div
-                className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${app.color} opacity-0 group-hover:opacity-100 transition-opacity`}
+                className={`absolute top-0 left-0 w-full h-1 bg-linear-to-r ${app.color} opacity-0 group-hover:opacity-100 transition-opacity`}
               />
 
               <div className="relative z-10 flex flex-col h-full">
@@ -181,7 +185,7 @@ export default function PortalGateway() {
                 >
                   {app.title}
                 </h2>
-                <p className="text-slate-500 text-xs leading-relaxed mb-6 flex-grow">
+                <p className="text-slate-500 text-xs leading-relaxed mb-6 grow">
                   {app.desc}
                 </p>
 
